@@ -2,7 +2,7 @@
 
 Connect your parked car to a computer over wired ENET. Open an AI agent with terminal access on that computer and give it this repository and [AgentReadMe.md](AgentReadMe.md). The agent identifies your head unit, checks compatibility, and installs your chosen apps under **My Vehicle**.
 
-## Desktop installer
+## Desktop installer (beta)
 
 [Download the macOS or Windows installer](https://github.com/inotbarnacle/ID6_apps_prerelease/releases/tag/installer-v0.7.0). Follow the [setup, install, and uninstall guide](Installer.md). Temporary SSH must be enabled before opening the installer.
 

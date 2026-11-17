@@ -2,15 +2,34 @@
 
 Match the reported firmware and both SHA-256 hashes before using the dashboard package. The desktop installers also check the display and generate layouts for 800 × 480, 960 × 480, 1280 × 480, 1440 × 540, and 1920 × 720. The raw dashboard ZIP uses the 1280 × 480 layout.
 
+## Tested and working installer profiles
+
+The installer accepts these exact firmware and framework combinations. The evidence column describes what worked on each firmware and where the result came from.
+
 | NBTevo firmware | AppFramework SHA-256 | CoreFramework SHA-256 | Evidence |
 | --- | --- | --- | --- |
-| N18032I | `93f4c7ab7e59c0adf7923b9b491de06165ba9d97bbe7412292e7ddc418ca2123` | `64ba154c68c772f9ca779fc18507f5b34715be58ded4a198b8a62b90d16c3ee0` | Dashboard menus rendered on the reference head unit |
-| N18092I | Same as N18032I | Same as N18032I | Exact framework match and [owner report](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/31) |
-| P18362I | `d9c674c210272e8f07473e73e59ed8f23d984d4d30162971bedb56d21c682b28` | `896d9de22fa85f7f5aa4fc2a0e62003c63c41c47186b06f39a2fd4fee06fa5d5` | Offline ABI comparison and QNX emulator plugin load with the captured frameworks |
+| N18032I | `93f4c7ab7e59c0adf7923b9b491de06165ba9d97bbe7412292e7ddc418ca2123` | `64ba154c68c772f9ca779fc18507f5b34715be58ded4a198b8a62b90d16c3ee0` | **Tested and working** for the dashboard menus opened on the reference head unit |
+| N18092I | Same as N18032I | Same as N18032I | **Tested and working** on wired ENET with an earlier package, per [owner report](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/31). The reported framework pair matches N18032I. |
+| P18362I | `d9c674c210272e8f07473e73e59ed8f23d984d4d30162971bedb56d21c682b28` | `896d9de22fa85f7f5aa4fc2a0e62003c63c41c47186b06f39a2fd4fee06fa5d5` | **Tested and working** for gauges over wired ENET on an earlier package, per the [owner report](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/8). The current plugin build also loaded in the QNX emulator. |
 | V20153I | `085b7f2a9f96734be51621a70a04c24d01525eb5e9852f45c845a7d2f4ae4c67` | `56705e56c349d9ae57a7782bd39b795cfc01391ba8ff155046f32fbe8ffad2cb` | Exact match to the capture used for the earlier QNX load check |
 | Y24073J | `ef2488b007d592301d8f21d9aa60771ad552d06b5e97c29e7813e3946644d820` | `cb0e488d1ebe2e30de87bb56f0e93d6a2d76b44309b0b47fef5b0b7cec048973` | Exact match to the capture used for the earlier QNX load check |
 
 These checks concern the head unit. Available gauges and controls depend on the vehicle ECU and tune. The two distinct gateway paths reported for [T23235J](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/37) and the reference car are handled through `gateway-ip.txt`. The installer still requires a matched firmware profile. For T23235J, use the [read-only capture tool](../tools/capture_headunit.py) to collect the framework evidence for a port. S19322I has a statically checked pair [below](#static-framework-checks). Compare both hashes against the target car before planning a parked load check. See [issue #27](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/27) for the reported R19144I HMI freeze.
+
+## Other reported firmware
+
+| NBTevo firmware | Reported result |
+| --- | --- |
+| K17052I | [Support request #34](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/34) |
+| R19144I | [Reported HMI freeze #27](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/27) |
+| S19322I | [Capture report #38](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/38) and static checks below |
+| T23235J | [BoostDeck and Engine Fault Codes opened](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/37) on the reported Supra. Its earlier package could not reach the diagnostic gateway. |
+| U19384I | [Capture report #4](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/4) and static checks below |
+| V20153J | [Reported controller compatibility #25](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/25) |
+| X20511I | [Capture report #16](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/16) and static checks below |
+| Y21432J | [Capture report #1](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/1) and static checks below |
+| Y22292I | [Contributor reported a working custom Bootmod3 build #42](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/42) |
+| Y23236I | [Capture report #40](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/40) |
 
 ## Static framework checks
 
