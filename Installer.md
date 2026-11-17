@@ -1,6 +1,6 @@
 # ID6Apps Desktop Installer (beta)
 
-Download the [installer release](https://github.com/inotbarnacle/ID6_apps_prerelease/releases/tag/installer-v0.7.0). The macOS app supports Apple silicon and Intel Macs. On Windows, open the x64 folder for Intel or AMD PCs, or the ARM64 folder for Windows on ARM.
+Download the [installer release](https://github.com/inotbarnacle/ID6_apps_prerelease/releases/tag/installer-v0.7.1). The macOS app supports Apple silicon and Intel Macs. On Windows, open the x64 folder for Intel or AMD PCs, or the ARM64 folder for Windows on ARM.
 
 ## Enable temporary SSH first
 

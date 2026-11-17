@@ -35,6 +35,7 @@ cxx -DPERF_LAB -Isrc -Isdk -O2 -fno-exceptions -fPIC -shared -DNATIVE_SHIFT_SMOO
     "$frameworks/libAppFramework.A.so" "$frameworks/libCoreFramework.A.so" -Lout -lm -lsocket \
     -Wl,--allow-shlib-undefined -Wl,-soname,libShiftDeck.so -o out/libShiftDeck.so
 worker -DPERF_LAB -DMHD_MAPS_ONLY src/collector.c src/gauge_core.c -o out/mhd-maps-qnx
+worker -DEXHAUST_FLAP_ONLY src/collector.c out/core.o -o out/exhaust-flap-worker-qnx
 worker -DNATIVE_FAST -DSHIFT_DECK_ONLY src/collector.c out/core.o -o out/shift-deck-qnx
 c -O2 -static fileops.c -o out/gaugedeck-fileops
 c -O2 src/exhaust_flap_launcher.c -lsocket -o out/exhaust-flap-qnx
