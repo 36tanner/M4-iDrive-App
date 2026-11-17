@@ -36,7 +36,17 @@ Use the [car identification steps](../../AgentReadMe.md#identify-the-car), the [
 
 Read `/opt/sys/etc/nbt_version.txt`, `uname -a`, and `/opt/sys/bin/LayerManagerControl get screen 0` over SSH. Record the on-screen version and known iDrive pixel resolution if the corresponding automatic query fails. Compare the two framework hashes with the reference table in `AgentReadMe.md`. For a different pair, compare static ABI evidence with the already tested reference using `native/tools/audit_framework_abi.py` with `pyelftools` and `capstone`. Verify all imported symbols, constructor signatures, and vtable slots, then run a parked load and lifecycle test on that firmware. Static similarity alone does not establish runtime compatibility. Add a firmware entry only with matching evidence. Keep firmware approval separate from the vehicle's DME/EGS signal mapping.
 
-For example, compare the candidate against an independently preserved reference library pair:
+The committed [framework fingerprint](../native/framework-fingerprint.json) lets you run this audit with only your own captured pair. It holds the symbol names, sizes, vtable relocation slots, and SHA-256 digests of the NBTevo_S19221I (ID5_1911) pair for the functions the seven packaged plugins import. It contains no framework code. Install the two Python packages, extract the plugin libraries from [packages/](../../packages/), and audit all of them in one run:
+
+```sh
+python3 -m pip install pyelftools capstone
+python3 native/tools/audit_framework_abi.py \
+  --fingerprint native/framework-fingerprint.json \
+  --installed-dir /private/candidate-frameworks \
+  --plugin /private/plugins/lib*.so --report /private/abi-report.json
+```
+
+S19221I is not the N18032I pair the packages were tested on. It is the reference used for the [static framework checks](COMPATIBILITY.md#static-framework-checks). To compare against a reference pair you hold yourself, pass its directory instead:
 
 ```sh
 python3 native/tools/audit_framework_abi.py \
@@ -45,4 +55,6 @@ python3 native/tools/audit_framework_abi.py \
   --plugin native/out/libBoostDeck.so --report /private/boostdeck-abi-report.json
 ```
 
-Repeat for ShiftDeck and MHD Maps and inspect the report's limitations. The tool compares selected instruction prefixes and vtable relocation slots. It does not simulate HMI calls or prove that a matched framework works at runtime.
+After changing a plugin's framework imports, regenerate the fingerprint from the private reference pair with `--reference-dir`, `--plugin` for every packaged plugin, `--emit-fingerprint native/framework-fingerprint.json`, and `--label`. `native/tests/test_fingerprint.py` checks that the fingerprint lists the packaged plugins.
+
+Inspect the report's limitations. The tool compares selected instruction prefixes and vtable relocation slots. It does not simulate HMI calls or prove that a matched framework works at runtime.
