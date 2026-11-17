@@ -2,7 +2,7 @@
 
 ## Select the apps
 
-Ask the owner for their choice of **MHD+ Suite** or **Bootmod3 Suite**, and whether they want **xDrive Control** and **HUD Gauges**. Install only the selected tuning menu. Install xDrive Control only when selected. BoostDeck, ShiftDeck, and Engine Fault Codes are independent apps.
+Ask the owner for their choice of **MHD+ Suite** or **Bootmod3 Suite**, and whether they want **xDrive Control (experimental)** and **HUD Gauges**. Install only the selected tuning menu. Install xDrive Control (experimental) only when selected. BoostDeck, ShiftDeck, and Engine Fault Codes are independent apps.
 
 ## Identify the car
 
@@ -49,11 +49,11 @@ Each app is one folder under /var/opt/hmi/data/ID5/Plugins. Keep each folder int
 | MHD+ Suite (with Exhaust Flap and Max Cooling) | MhdMaps |
 | Exhaust Flap from earlier standalone builds | ExhaustFlap |
 | Bootmod3 Suite | Bootmod3Suite |
-| xDrive Control | XDriveControl |
+| xDrive Control (experimental) | XDriveControl |
 | HUD Gauges | HudTest |
 
 1. Ask the owner which apps to remove. Leave every other folder in Plugins untouched.
-2. While the menus still exist, have the owner put the car back in the state they want to keep. Uncheck **My Vehicle → HUD Gauges → Show HUD gauges** and confirm the overlay clears. With the engine off, switch xDrive Control back to AWD. Select the wanted map slot, exhaust flap, Max Cooling, Active Sound, and burble settings. Removing a menu does not undo a setting already sent to the DME or DSC.
+2. While the menus still exist, have the owner put the car back in the state they want to keep. Uncheck **My Vehicle → HUD Gauges → Show HUD gauges** and confirm the overlay clears. With the engine off, switch xDrive Control (experimental) back to AWD. Select the wanted map slot, exhaust flap, Max Cooling, Active Sound, and burble settings. Removing a menu does not undo a setting already sent to the DME or DSC.
 3. Park the car, keep iDrive awake, and connect as in [Identify the car](#identify-the-car). On a split-node unit, use the OMAP address or the Qnet write path described in [Split-node units](source/docs/PORTING.md#split-node-units).
 4. List Plugins and confirm that each folder to remove is one of the apps above. Move only those folders into a new backup directory outside Plugins, such as /var/opt/hmi/data/ID5/PluginBackups/<timestamp>. Keep the original folder names, avoid overwriting an existing backup, and record the backup path.
 5. List Plugins again and verify that the removed folders are gone and the remaining ones are unchanged.

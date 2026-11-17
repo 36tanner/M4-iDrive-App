@@ -42,6 +42,6 @@ Open points:
 - R19101I has the framework sizes reported for R19144I (51580 and 95400 bytes). R19144I itself was not inspected, and its [HMI freeze report](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/27) is unexplained by these checks.
 - The audit compares instruction prefixes and vtable slots. It does not show that a plugin loads or that its menus work.
 
-## xDrive Control
+## xDrive Control (experimental)
 
 The Status command reports whether DSC identification timed out, returned a UDS refusal, or identified an unsupported SGBD index. This distinguishes the missing replies in [issue #23](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/23) from an identified 0F2100 in [issue #25](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/25). Mode changes retain the stationary, engine-off Park checks. The write allowlist remains 0F2510 and 0F2850. The immediate AWD restore is limited to 0F2850, as in the [upstream measurements and implementation](https://github.com/cauliflowermossgrape/idrive7-apps/blob/main/apps/live_adjustments/xdrive.js).
