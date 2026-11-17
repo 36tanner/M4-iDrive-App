@@ -36,3 +36,27 @@ After verification, have the owner hold the volume knob until iDrive goes dark, 
 Install the [HUD Gauges package](packages/hud-gauges.zip) when the owner selects it and the car has the matching reference configuration. Verify the reference firmware, framework hashes, resolution, and gateway above. The worker also expects a unique factory MOST HUDTerminal service 82/00 at node 0101. Treat other configurations as porting targets.
 
 Extract and verify SHA256SUMS. Stage only the HudTest directory and check for an existing HudTest or an app using connector ID 107. Preserve the prior app outside Plugins if replacing it. Keep the included gateway-ip.txt beside the worker. Set hud-shape-qnx executable, verify the uploaded files, and restart iDrive while parked. Open My Vehicle → HUD Gauges and check Show HUD gauges. Verify the tach and PSI display, that the checkbox persists across a restart, and that unchecking clears the overlay. If the display fails its parked checks, turn it off and restore the prior app folder or remove HudTest from Plugins, then restart iDrive.
+
+## Uninstall
+
+Each app is one folder under /var/opt/hmi/data/ID5/Plugins. Its settings live in the same folder (gateway-ip.txt, and hud-enabled for HUD Gauges), so removing the folder removes the app completely. The install does not remount or change any other path.
+
+| App | Folder |
+| --- | --- |
+| BoostDeck | BoostDeck |
+| ShiftDeck | ShiftDeck |
+| Engine Fault Codes | EngineCodes |
+| MHD+ Suite (with Exhaust Flap and Max Cooling) | MhdMaps |
+| Exhaust Flap from earlier standalone builds | ExhaustFlap |
+| Bootmod3 Suite | Bootmod3Suite |
+| xDrive Control | XDriveControl |
+| HUD Gauges | HudTest |
+
+1. Ask the owner which apps to remove. Leave every other folder in Plugins untouched.
+2. While the menus still exist, have the owner put the car back in the state they want to keep. Uncheck **My Vehicle → HUD Gauges → Show HUD gauges** and confirm the overlay clears. With the engine off, switch xDrive Control back to AWD. Select the wanted map slot, exhaust flap, Max Cooling, Active Sound, and burble settings. Removing a menu does not undo a setting already sent to the DME or DSC.
+3. Park the car, keep iDrive awake, and connect as in [Identify the car](#identify-the-car). On a split-node unit, use the OMAP address or the Qnet write path described in [Split-node units](source/docs/PORTING.md#split-node-units).
+4. List Plugins and confirm that each folder to remove is one of the apps above. Delete each of those folders completely.
+5. List Plugins again and verify that the removed folders are gone and the remaining ones are unchanged.
+6. Have the owner hold the volume knob until iDrive goes dark. After the restart, check that the removed entries are gone from My Vehicle, the remaining apps still open, and the HUD shows no overlay.
+
+To get an app back, install it again from its package.
