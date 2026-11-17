@@ -32,9 +32,9 @@ The pairs below were extracted from the head-unit software in BMW programming da
 Results:
 
 - **ABI audit:** `native/tools/audit_framework_abi.py`, with the ID5_1911 pair as reference, passes for all seven packaged plugins (BoostDeck, ShiftDeck, EngineCodes, MhdMaps, Bootmod3Suite, XDriveControl, HudTest) on every build above. It covers 46 to 52 function prefixes per plugin and the `bmw::PluginApp` vtable slots.
-- **Exports and imports:** M17345I, O18184I, P18362I, S19221I, X20511I, Y21432J, and Y24073J export the same 733 symbols with the same sizes and types, and all 52 `bmw::` symbols imported by the plugins resolve in each. This comparison was not repeated for R19101I, S19322I, and U19384I.
+- **Exports and imports:** all ten builds export the same framework symbols with the same names, sizes, and types, and all 52 `bmw::` symbols imported by the plugins resolve in each.
 - **Car capture:** the P18362I pair equals the pair read from a 2017 F20 (B58). The Y21432J and Y24073J pairs equal hashes reported from cars in issues #1, #11, and #13.
-- **System libraries:** `libm.so.2`, `libsocket.so.3`, and `libstdc++.so.6` are byte-identical in those seven builds. For P18362I, every symbol and symbol version imported by the seven plugins and seven workers resolves against these and the firmware's `libc.so.3`. The `libc.so.3` of the other builds was not checked.
+- **System libraries:** `libm.so.2`, `libsocket.so.3`, and `libstdc++.so.6` are byte-identical in M17345I, O18184I, P18362I, S19221I, X20511I, Y21432J, and Y24073J. They were not extracted for R19101I, S19322I, and U19384I. For P18362I, every symbol and symbol version imported by the seven plugins and seven workers resolves against these and the firmware's `libc.so.3`. The `libc.so.3` of the other builds was not checked.
 
 Open points:
 
