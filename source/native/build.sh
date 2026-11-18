@@ -53,3 +53,11 @@ for app in Bootmod3Suite XDriveControl; do
         "$frameworks/libAppFramework.A.so" "$frameworks/libCoreFramework.A.so" -Lout -lsocket \
         -Wl,--allow-shlib-undefined "-Wl,-soname,lib$app.so" -o "out/lib$app.so"
 done
+cxx -Isrc -Isdk -O2 -fno-exceptions -fPIC -shared src/light_show.cpp \
+    "$frameworks/libAppFramework.A.so" "$frameworks/libCoreFramework.A.so" -Lout \
+    -Wl,--allow-shlib-undefined -Wl,-soname,libBEAMer.so -o out/libBEAMer.so
+worker src/beamer_worker.c out/core.o -o out/beamer-qnx
+cxx -Isrc -Isdk -O2 -fno-exceptions -fPIC -shared src/road_jet.cpp out/core.o \
+    "$frameworks/libAppFramework.A.so" "$frameworks/libCoreFramework.A.so" -Lout -lm -lsocket \
+    -Wl,--allow-shlib-undefined -Wl,-soname,libRoadJet.so -o out/libRoadJet.so
+worker src/road_jet_worker.c out/core.o -o out/road-jet-qnx
