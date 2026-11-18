@@ -30,7 +30,7 @@ Choose **MHD+ Suite** or **Bootmod3 Suite**. [Download the dashboard package](pa
 - **BEAMer** offers Front, Rear, Both, and Insane lighting patterns in Park at zero speed. Tested on an F3x car. Other Fxx cars may work if they have the supported lighting module. Gxx has not been tested. [BEAMer package](packages/beamer.zip)
 - **HUD Gauges** projects a live curved tachometer and numeric boost in PSI onto the factory windshield HUD. The tach spans 0–8,000 RPM, with a thicker redline zone starting at 6,700 RPM. Enable **My Vehicle → HUD Gauges → Show HUD gauges** to keep the display on after leaving the menu and restore it at the next boot. Uncheck it to clear the display. The overlay yields when it detects factory navigation guidance. [HUD Gauges package](packages/hud-gauges.zip)
 
-## Screenshots from iDrive
+## iDrive menus
 
 <table>
   <tr>
@@ -49,8 +49,23 @@ Choose **MHD+ Suite** or **Bootmod3 Suite**. [Download the dashboard package](pa
     <td><img src="images/07-road-jet.png" alt="Road Jet on iDrive" width="300"><br>Road Jet</td>
     <td><img src="images/08-beamer.png" alt="BEAMer on iDrive" width="300"><br>BEAMer</td>
   </tr>
+  <tr>
+    <td><img src="images/09-xdrive-control.png" alt="xDrive Control main menu" width="300"><br>xDrive Control (experimental)</td>
+  </tr>
 </table>
 
+### Bootmod3 specific
+
+<table>
+  <tr>
+    <td><img src="images/bootmod3-map-switcher.png" alt="Bootmod3 map switcher" width="300"><br>Map Switcher</td>
+    <td><img src="images/bootmod3-exhaust-flap.png" alt="Bootmod3 Exhaust Flap" width="300"><br>Exhaust Flap</td>
+  </tr>
+  <tr>
+    <td><img src="images/bootmod3-active-sound.png" alt="Bootmod3 Active Sound" width="300"><br>Active Sound</td>
+    <td><img src="images/bootmod3-burbles.png" alt="Bootmod3 Burbles" width="300"><br>Burbles</td>
+  </tr>
+</table>
 
 ### HUD Gauges
 
