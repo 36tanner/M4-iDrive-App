@@ -32,25 +32,32 @@ Choose **MHD+ Suite** or **Bootmod3 Suite**. [Download the dashboard package](pa
 
 ## iDrive menus
 
+### General menus
+
 <table>
   <tr>
     <td><img src="images/01-boostdeck.png" alt="BoostDeck on iDrive" width="300"><br>BoostDeck</td>
     <td><img src="images/02-shiftdeck.png" alt="ShiftDeck on iDrive" width="300"><br>ShiftDeck</td>
   </tr>
   <tr>
+    <td><img src="images/06-engine-fault-codes.png" alt="Engine Fault Codes on iDrive" width="300"><br>Engine Fault Codes</td>
+    <td><img src="images/07-road-jet.png" alt="Road Jet on iDrive" width="300"><br>Road Jet</td>
+  </tr>
+  <tr>
+    <td><img src="images/08-beamer.png" alt="BEAMer on iDrive" width="300"><br>BEAMer</td>
+    <td><img src="images/09-xdrive-control.png" alt="xDrive Control main menu" width="300"><br>xDrive Control (experimental)</td>
+  </tr>
+</table>
+
+### MHD specific
+
+<table>
+  <tr>
     <td><img src="images/03-mhd-suite.png" alt="MHD+ Suite on iDrive" width="300"><br>MHD+ Suite</td>
     <td><img src="images/04-exhaust-flap.png" alt="Exhaust Flap on iDrive" width="300"><br>Exhaust Flap</td>
   </tr>
   <tr>
     <td><img src="images/05-max-cooling.png" alt="Max Cooling on iDrive" width="300"><br>Max Cooling</td>
-    <td><img src="images/06-engine-fault-codes.png" alt="Engine Fault Codes on iDrive" width="300"><br>Engine Fault Codes</td>
-  </tr>
-  <tr>
-    <td><img src="images/07-road-jet.png" alt="Road Jet on iDrive" width="300"><br>Road Jet</td>
-    <td><img src="images/08-beamer.png" alt="BEAMer on iDrive" width="300"><br>BEAMer</td>
-  </tr>
-  <tr>
-    <td><img src="images/09-xdrive-control.png" alt="xDrive Control main menu" width="300"><br>xDrive Control (experimental)</td>
   </tr>
 </table>
 
