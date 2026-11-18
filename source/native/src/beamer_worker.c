@@ -90,11 +90,11 @@ static unsigned char show(struct diag_link *link, unsigned pattern) {
         unsigned mask = (beat & ~QUICK) & ~unavailable;
         unsigned active = 0;
         uint64_t step = bd_mono_ms();
+        unsigned char blocked = parking_status(link);
+        if (blocked) return blocked;
         for (unsigned index = 0; index < sizeof lamp_functions; ++index) {
             unsigned lamp = 1u << index;
             if (!(mask & lamp)) continue;
-            unsigned char blocked = parking_status(link);
-            if (blocked) return blocked;
             enum PulseResult result = pulse(link, lamp_functions[index]);
             if (result == PULSE_FAILED) return 'N';
             if (result == PULSE_UNSUPPORTED) {
