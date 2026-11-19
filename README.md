@@ -2,6 +2,10 @@
 
 Connect your parked car to a computer over wired ENET. Open an AI agent with terminal access on that computer and give it this repository and [AgentReadMe.md](AgentReadMe.md). The agent identifies your head unit, checks compatibility, and installs your chosen apps under **My Vehicle**.
 
+## Unsupported firmware? Run the Trio Compatibility Collector
+
+If your version is unsupported, enable temporary SSH with Bavarian SSH Client first. Run the [Trio Compatibility Collector](source/tools/trio-collector/Quick%20Start.md) and email the ZIP it creates to [nordicbmwdealer@gmail.com](mailto:nordicbmwdealer@gmail.com) so we can get a fix to you quickly.
+
 ## Desktop installer (beta)
 
 [Download the macOS or Windows installer](https://github.com/inotbarnacle/ID6_apps_prerelease/releases). Follow the [setup, install, and uninstall guide](Installer.md). Temporary SSH must be enabled before opening the installer.
