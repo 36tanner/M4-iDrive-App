@@ -6,7 +6,7 @@ from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 from PIL import Image, ImageDraw, ImageFont
 import shift_art as art
 
-ROOT = Path(__file__).resolve().parents[1] / "plugin"
+ROOT = Path(__file__).resolve().parents[1] / "native" / "manifests"
 
 
 def save(doc, name):
@@ -91,7 +91,7 @@ def shift_app():
         button(items,301+i,41+i,f"{rpm:,} RPM")
 
     save(doc,f"{name}.xml")
-    art.save_assets(ROOT/f"{name}_ALL_Images.zip",ROOT.parent/"src"/"shift_assets.h")
+    art.save_assets(ROOT/f"{name}_ALL_Images.zip",ROOT.parent/"src"/"plugins"/"shift_assets.h")
 
 
 def map_app():

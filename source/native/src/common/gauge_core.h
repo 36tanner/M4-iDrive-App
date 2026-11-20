@@ -20,7 +20,7 @@ typedef struct {
     unsigned demo, valid;
     uint64_t sent_ms; /* sender CLOCK_MONOTONIC, shared by processes on the same QNX node */
     double value[BD_COUNT]; /* psi, gasoline-equivalent AFR, degrees, C, C, bar, bar, C
-                               PERF_LAB adds: ethanol %, oil temperature C, battery V */
+                               extended channels: ethanol %, oil temperature C, battery V */
     unsigned age_ms[BD_COUNT];
 } bd_frame;
 uint64_t bd_mono_ms(void);

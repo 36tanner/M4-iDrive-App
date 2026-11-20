@@ -1,5 +1,7 @@
 # Change notes
 
+- **v0.7.5-rc6** adopts the standalone QNX worker and RHMI plugin layout from [Andreas Boehm’s PR #109](https://github.com/inotbarnacle/ID6_apps_prerelease/pull/109).
+
 - **v0.7.5-rc5** uses the measured engine-running Park response for DSC_25 with LMV 0F1480. [zelnkup’s PR #114](https://github.com/inotbarnacle/ID6_apps_prerelease/pull/114)
 
 - **v0.7.5-rc4** narrows the BoostDeck low-oil-pressure alert choices to 5–25 psi. Earlier saved thresholds above 25 psi load as 25 psi.

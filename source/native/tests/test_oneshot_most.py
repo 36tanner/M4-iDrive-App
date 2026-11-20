@@ -134,7 +134,7 @@ class MhdMostTest(unittest.TestCase):
         """A slow tunnel: the gauge worker steps aside, so every map press gets its turn."""
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as udp:
             udp.bind(("127.0.0.1", 0))
-            boost = subprocess.Popen([BUILD/"boostdeck-collector", "--session", "--transport", "most",
+            boost = subprocess.Popen([BUILD/"boost-deck", "--session", "--transport", "most",
                                       "--udp-port", str(udp.getsockname()[1])],
                                      stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True,
                                      env=fake_env("up", 250))

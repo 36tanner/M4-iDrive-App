@@ -96,11 +96,7 @@ int bd_encode(const bd_frame *f, char *out, size_t len) {
     size_t used;
     unsigned i;
     if (!f || !out || !len) return -1;
-    #ifdef PERF_LAB
     const char *version = "NBG7";
-#else
-    const char *version = "NBG3";
-#endif
     n = snprintf(out, len, "%s %lu %u %u %llu", version,
                  (unsigned long)f->seq, f->demo, f->valid,
                  (unsigned long long)f->sent_ms);
@@ -147,13 +143,11 @@ int bd_parse(const char *data, size_t len, bd_frame *out) {
     memcpy(b, data, len); b[len] = 0;
     memset(&f, 0, sizeof f);
     if (len<5 || !isspace((unsigned char)b[4])) return 0;
-    #ifdef PERF_LAB
     if (!memcmp(b,"NBG7",4)) fields=BD_COUNT;
     else if (!memcmp(b,"NBG6",4)) fields=22;
     else if (!memcmp(b,"NBG5",4)) fields=11;
     else if (!memcmp(b,"NBG4",4)) fields=9;
     else
-#endif
     if (!memcmp(b,"NBG3",4)) fields=8;
     else if (!memcmp(b,"NBG2",4)) fields=5;
     else return 0;
@@ -167,9 +161,7 @@ int bd_parse(const char *data, size_t len, bd_frame *out) {
     if (!unsigned_field(&cursor,UINT64_MAX,&f.sent_ms)) return 0;
     for (i = 0; i < fields; ++i) {
         double limit=20000;
-#ifdef PERF_LAB
         if (i==BD_ABS_LOAD) limit=25700;
-#endif
         if (!double_field(&cursor,&f.value[i],limit) || !unsigned_field(&cursor,999999,&integer)) return 0;
         f.age_ms[i]=(unsigned)integer;
     }
@@ -182,10 +174,8 @@ int bd_parse(const char *data, size_t len, bd_frame *out) {
 int bd_is_fresh(const bd_frame *f, unsigned i, uint64_t elapsed) {
     unsigned limit = i==BD_IAT || i==BD_TRANS || i==BD_COOLANT ? BD_TEMP_STALE_MS
                    : BD_STALE_MS;
-    #ifdef PERF_LAB
     if (i == BD_ETHANOL) limit = 6500;
     if (i >= BD_OIL_TEMP) limit = BD_TEMP_STALE_MS;
-#endif
     return i < BD_COUNT && (f->valid & (1u << i)) &&
         elapsed < limit && f->age_ms[i] < limit - elapsed;
 }

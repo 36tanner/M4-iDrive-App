@@ -7,50 +7,23 @@
 namespace {
 const unsigned kMapPoll = 0x4d48444du;
 const unsigned kMapClear = 0x4d484443u;
-#if defined(BM3_ONLY)
-#define CONTROL_PLUGIN "Bootmod3Suite"
-#define CONTROL_WORKER "bootmod3-qnx"
-#elif defined(XDRIVE_ONLY)
-#define CONTROL_PLUGIN "XDriveControl"
-#define CONTROL_WORKER "xdrive-control-qnx"
-#else
-#define CONTROL_PLUGIN "MhdMaps"
-#define CONTROL_WORKER "mhd-maps-qnx"
-#endif
-const char kMapWorker[] = "/var/opt/hmi/data/ID5/Plugins/" CONTROL_PLUGIN "/" CONTROL_WORKER;
-#if defined(PERF_LAB) && !defined(BM3_ONLY) && !defined(XDRIVE_ONLY)
-const char kFlapWorker[] = "/var/opt/hmi/data/ID5/Plugins/" CONTROL_PLUGIN "/exhaust-flap-worker-qnx";
-#endif
+const char kMapWorker[] = "/var/opt/hmi/data/ID5/Plugins/MhdMaps/mhd-maps-qnx";
+const char kFlapWorker[] = "/var/opt/hmi/data/ID5/Plugins/MhdMaps/exhaust-flap-worker-qnx";
 }
 
-#if defined(XDRIVE_ONLY)
-#define CONTROL_APP_CLASS XDriveControlApp
-#else
-#define CONTROL_APP_CLASS MhdMaps
-#endif
-
-class CONTROL_APP_CLASS : public bmw::PluginApp {
+class MhdMaps : public bmw::PluginApp {
     pid_t child_;
     int pipe_;
     unsigned generation_;
-#if defined(PERF_LAB) || defined(BM3_ONLY)
     unsigned resultModel_;
-#endif
     char result_[128];
     size_t used_;
-#if defined(PERF_LAB) && !defined(BM3_ONLY) && !defined(XDRIVE_ONLY)
     unsigned acceptedMap_; // 0 until the DME echoes a map request
     int acceptedCooling_; // -1 until the DME echoes a cooling request
-#endif
 
     void status(const char* value) {
-#if defined(PERF_LAB) || defined(BM3_ONLY)
         updateModel(resultModel_,bmw::BasicString<char>(value));
-#else
-        updateModel(50u,bmw::BasicString<char>(value));
-#endif
     }
-#if defined(PERF_LAB) && !defined(BM3_ONLY) && !defined(XDRIVE_ONLY)
     void showAcceptedSettings() {
         const char* cooling=acceptedCooling_<0 ? "Unknown" : acceptedCooling_ ? "On" : "Off";
         char map[12]="Unknown";
@@ -81,7 +54,6 @@ class CONTROL_APP_CLASS : public bmw::PluginApp {
         updateModel(67u,bmw::ImageID(!strcmp(selected,"Confirmed: Exhaust auto") ? 56203u : 56202u));
         updateModel(68u,bmw::ImageID(!strcmp(selected,"Confirmed: Exhaust closed") ? 56205u : 56204u));
     }
-#endif
     void reap() {
         if (child_<=0) return;
         pid_t ended=waitpid(child_,0,WNOHANG);
@@ -105,32 +77,15 @@ class CONTROL_APP_CLASS : public bmw::PluginApp {
         reap();
         if (pipe_>=0 || child_>0) return true;
         ++generation_; // a prior result's dismissal cannot erase this request
-#if defined(PERF_LAB) || defined(BM3_ONLY)
-#ifdef XDRIVE_ONLY
-        resultModel_=50u;
-#else
         resultModel_=Function==5 ? 50u : 49u+Function;
-#endif
-#endif
-#if defined(PERF_LAB) && !defined(BM3_ONLY) && !defined(XDRIVE_ONLY)
         if (Function==3) coolingTiles("");
-#endif
         int channel[2];
         if (pipe(channel)<0) { status("Could not start map request"); return true; }
         const char argument[]={static_cast<char>('0'+Value),0};
-#if defined(XDRIVE_ONLY)
-        const char* mode=Function==1 ? "--status" : "--drive-mode";
-#elif defined(BM3_ONLY)
-        const char* mode=Function==1 ? "--map" : Function==2 ? "--flap" : Function==3 ? "--sound" :
-                         Function==4 ? "--burbles" : "--current-map";
-#else
         const char* mode=Function==1 ? "--map" : Function==2 ? "--flap" : "--cooling";
-#endif
-        const DiagnosticGateway gateway("/var/opt/hmi/data/ID5/Plugins/" CONTROL_PLUGIN "/gateway-ip.txt");
+        const DiagnosticGateway gateway("/var/opt/hmi/data/ID5/Plugins/MhdMaps/gateway-ip.txt");
         const char* worker=kMapWorker;
-#if defined(PERF_LAB) && !defined(BM3_ONLY) && !defined(XDRIVE_ONLY)
         if (Function==2) worker=kFlapWorker;
-#endif
         const char* args[]={worker,"--host",gateway.host(),mode,argument,0};
         if (fcntl(channel[0],F_SETFL,O_NONBLOCK)>=0 &&
             fcntl(channel[0],F_SETFD,FD_CLOEXEC)>=0 && fcntl(channel[1],F_SETFD,FD_CLOEXEC)>=0)
@@ -152,81 +107,44 @@ class CONTROL_APP_CLASS : public bmw::PluginApp {
         return true;
     }
 
-#ifdef BM3_ONLY
-    bool readMapOnEntry(const bmw::Parcel& event) {
-        bool visible;
-        if (event.readBool(visible) && visible) return selectMap<0,5>(event);
-        return true;
-    }
-#endif
-
 public:
-    CONTROL_APP_CLASS(bmw::IDispatcher& d,bmw::BasicString<char> name,unsigned maj,unsigned min,
+    MhdMaps(bmw::IDispatcher& d,bmw::BasicString<char> name,unsigned maj,unsigned min,
             bmw::RHMIInterfaceVersion version,const bmw::Bundle& cfg,const bmw::Bundle& res)
         : PluginApp(d,name,maj,min,version,cfg,res),child_(-1),pipe_(-1),
           generation_(0),
-#if defined(PERF_LAB) || defined(BM3_ONLY)
           resultModel_(50u),
-#endif
           used_(0)
-#if defined(PERF_LAB) && !defined(BM3_ONLY) && !defined(XDRIVE_ONLY)
           ,acceptedMap_(0),acceptedCooling_(-1)
-#endif
            {}
-    virtual ~CONTROL_APP_CLASS() { stopWorker(); }
+    virtual ~MhdMaps() { stopWorker(); }
     virtual bool onFinalize() { stopWorker(); return true; }
     virtual bool onInit() {
         stopWorker();
         typedef bmw::Delegate<bool,const bmw::Parcel&> Action;
         Action action;
         action.m_obj=this;
-#ifdef XDRIVE_ONLY
-        action.m_exec=&Action::execImpl<CONTROL_APP_CLASS,&CONTROL_APP_CLASS::selectMap<0,1> >;
+        action.m_exec=&Action::execImpl<MhdMaps,&MhdMaps::selectMap<1,1> >;
         addHandler(21u,action);
-        action.m_exec=&Action::execImpl<CONTROL_APP_CLASS,&CONTROL_APP_CLASS::selectMap<0,2> >;
+        action.m_exec=&Action::execImpl<MhdMaps,&MhdMaps::selectMap<2,1> >;
         addHandler(22u,action);
-        action.m_exec=&Action::execImpl<CONTROL_APP_CLASS,&CONTROL_APP_CLASS::selectMap<1,2> >;
+        action.m_exec=&Action::execImpl<MhdMaps,&MhdMaps::selectMap<3,1> >;
         addHandler(23u,action);
-#else
-        action.m_exec=&Action::execImpl<CONTROL_APP_CLASS,&CONTROL_APP_CLASS::selectMap<1,1> >;
-        addHandler(21u,action);
-        action.m_exec=&Action::execImpl<CONTROL_APP_CLASS,&CONTROL_APP_CLASS::selectMap<2,1> >;
-        addHandler(22u,action);
-        action.m_exec=&Action::execImpl<CONTROL_APP_CLASS,&CONTROL_APP_CLASS::selectMap<3,1> >;
-        addHandler(23u,action);
-        action.m_exec=&Action::execImpl<CONTROL_APP_CLASS,&CONTROL_APP_CLASS::selectMap<4,1> >;
+        action.m_exec=&Action::execImpl<MhdMaps,&MhdMaps::selectMap<4,1> >;
         addHandler(24u,action);
-#if defined(PERF_LAB) || defined(BM3_ONLY)
-        action.m_exec=&Action::execImpl<CONTROL_APP_CLASS,&CONTROL_APP_CLASS::selectMap<0,2> >;
+        action.m_exec=&Action::execImpl<MhdMaps,&MhdMaps::selectMap<0,2> >;
         addHandler(25u,action);
-        action.m_exec=&Action::execImpl<CONTROL_APP_CLASS,&CONTROL_APP_CLASS::selectMap<1,2> >;
+        action.m_exec=&Action::execImpl<MhdMaps,&MhdMaps::selectMap<1,2> >;
         addHandler(26u,action);
-        action.m_exec=&Action::execImpl<CONTROL_APP_CLASS,&CONTROL_APP_CLASS::selectMap<2,2> >;
+        action.m_exec=&Action::execImpl<MhdMaps,&MhdMaps::selectMap<2,2> >;
         addHandler(27u,action);
-        action.m_exec=&Action::execImpl<CONTROL_APP_CLASS,&CONTROL_APP_CLASS::selectMap<0,3> >;
+        action.m_exec=&Action::execImpl<MhdMaps,&MhdMaps::selectMap<0,3> >;
         addHandler(28u,action);
-        action.m_exec=&Action::execImpl<CONTROL_APP_CLASS,&CONTROL_APP_CLASS::selectMap<1,3> >;
+        action.m_exec=&Action::execImpl<MhdMaps,&MhdMaps::selectMap<1,3> >;
         addHandler(29u,action);
-#ifdef BM3_ONLY
-        action.m_exec=&Action::execImpl<CONTROL_APP_CLASS,&CONTROL_APP_CLASS::selectMap<0,4> >;
-        addHandler(30u,action);
-        action.m_exec=&Action::execImpl<CONTROL_APP_CLASS,&CONTROL_APP_CLASS::selectMap<1,4> >;
-        addHandler(31u,action);
-        action.m_exec=&Action::execImpl<CONTROL_APP_CLASS,&CONTROL_APP_CLASS::selectMap<2,4> >;
-        addHandler(32u,action);
-        action.m_exec=&Action::execImpl<CONTROL_APP_CLASS,&CONTROL_APP_CLASS::selectMap<3,4> >;
-        addHandler(33u,action);
-        action.m_exec=&Action::execImpl<CONTROL_APP_CLASS,&CONTROL_APP_CLASS::readMapOnEntry>;
-        addHandler(100u,11u,action);
-#endif
-#endif
-#endif
         status("");
-#if defined(PERF_LAB) && !defined(BM3_ONLY) && !defined(XDRIVE_ONLY)
         coolingTiles("");
         flapTiles("");
         showAcceptedSettings();
-#endif
         if (child_>0) postPoll();
         return true;
     }
@@ -244,11 +162,9 @@ public:
                 pipe_=-1;
                 while (used_ && (result_[used_-1]=='\n' || result_[used_-1]=='\r')) --used_;
                 result_[used_]=0;
-#if defined(PERF_LAB) && !defined(BM3_ONLY) && !defined(XDRIVE_ONLY)
                 rememberAcceptedSettings();
                 if (resultModel_==52u) coolingTiles(result_);
                 if (resultModel_==51u && !strncmp(result_,"Confirmed: Exhaust ",19)) flapTiles(result_);
-#endif
                 status(used_ ? result_ : "No result received from the diagnostic worker.");
                 if (!strncmp(result_,"Confirmed: ",11) || !strncmp(result_,"Accepted by DME: Map ",21))
                     postStatusEvent(kMapClear,3500u);
@@ -261,6 +177,6 @@ public:
 };
 
 extern "C" {
-PluginAppInfo pluginAppInfo={1,CONTROL_PLUGIN,"owner-development",1,
-                            create_app<CONTROL_APP_CLASS>,destroy_app};
+PluginAppInfo pluginAppInfo={1,"MhdMaps","owner-development",1,
+                            create_app<MhdMaps>,destroy_app};
 }

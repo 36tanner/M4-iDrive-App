@@ -10,7 +10,7 @@ import time
 import unittest
 from pathlib import Path
 
-BIN = str(Path(__file__).resolve().parents[1] / "build/boostdeck-collector")
+BIN = str(Path(__file__).resolve().parents[1] / "build/boost-deck")
 VALUES = {0x4201: bytes.fromhex("63ca"), 0x4205: bytes.fromhex("31e5"),
           0x5889: bytes.fromhex("104e"), 0x4A49: bytes.fromhex("004e"),
           0x580F: bytes.fromhex("82"), 0xDA12: bytes.fromhex("008e")}
@@ -117,7 +117,7 @@ class TransportTest(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             packets = [udp.recv(512).decode().split() for _ in range(cycles)]
             packet = packets[-1]
-            self.assertEqual(packet[0], "NBG3")
+            self.assertEqual(packet[0], "NBG7")
             self.assertGreater(int(packet[4]), 0)
             t.join(2)
             self.assertFalse(t.is_alive())
@@ -147,7 +147,7 @@ class TransportTest(unittest.TestCase):
     def test_fast_channels_and_staggered_slow_updates(self):
         packet, requests, trace = self.run_collector("paced", ("--trace",), cycles=32)
         self.assertEqual(int(packet[3]), 255)
-        self.assertEqual(len(packet), 21)  # eight pairs of values and ages
+        self.assertEqual(len(packet), 67)  # one value and age per signal
         self.assertNotIn(bytes.fromhex("f4120152"), requests)
         # Correct for host timer coalescing in the mock gateway. Keep the same
         # collector budget at the intended delay, including the slow DID reads.
@@ -362,7 +362,7 @@ class TransportTest(unittest.TestCase):
             r = subprocess.run([BIN, "--demo", "--cycles", "1", "--udp-port", str(udp.getsockname()[1])],
                                capture_output=True, timeout=2)
             self.assertEqual(r.returncode, 0)
-            self.assertEqual(udp.recv(512).decode().split()[2:4], ["1", "255"])
+            self.assertEqual(udp.recv(512).decode().split()[2:4], ["1", str((1 << 31) - 1)])  # demo marks all 31 signals valid
         r = subprocess.run([BIN, "--demo", "--host", "127.0.0.1"], capture_output=True)
         self.assertEqual(r.returncode, 2)
 

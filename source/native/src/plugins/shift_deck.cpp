@@ -14,10 +14,8 @@ namespace {
 const unsigned kShiftPoll=0x53484654u;
 const char kShiftWorker[]="/var/opt/hmi/data/ID5/Plugins/ShiftDeck/shift-deck-qnx";
 const char kPreferences[]="/var/opt/hmi/data/ID5/ShiftDeck.prefs";
-#ifdef NATIVE_SHIFT_SMOOTH
 const unsigned kSweepSteps=128, kSweepBase=56400, kSweepAlert=56529;
 const unsigned kEaseMs=50;
-#endif
 }
 
 class ShiftDeck : public bmw::PluginApp {
@@ -32,7 +30,6 @@ class ShiftDeck : public bmw::PluginApp {
     int rpm_,kph_;
     bool shift_;
     bool metric_;
-#ifdef NATIVE_SHIFT_SMOOTH
     double rpm_from_;
     uint64_t rpm_started_;
     double animatedRpm(uint64_t now) const {
@@ -40,7 +37,6 @@ class ShiftDeck : public bmw::PluginApp {
         const double remaining=1.-static_cast<double>(now-rpm_started_)/kEaseMs;
         return frame_.rpm+(rpm_from_-frame_.rpm)*remaining*remaining;
     }
-#endif
 
     void label(unsigned id,const char* value) { updateModel(id,bmw::BasicString<char>(value)); }
     void reap() {
@@ -80,16 +76,10 @@ class ShiftDeck : public bmw::PluginApp {
         int target=static_cast<int>(kShiftTargets[target_]);
         bool shift=rpm>=target;
         int displayed_rpm=rpm;
-#ifdef NATIVE_SHIFT_SMOOTH
         if (rpm>=0) displayed_rpm=static_cast<int>(animatedRpm(now)+.5);
         unsigned bars=displayed_rpm>0 ? (displayed_rpm*kSweepSteps+4000)/8000 : 0;
         if (bars>kSweepSteps) bars=kSweepSteps;
         unsigned image=(shift ? kSweepAlert : kSweepBase)+bars;
-#else
-        unsigned bars=rpm>0 ? static_cast<unsigned>(rpm+125)/250 : 0;
-        if (bars>32) bars=32;
-        unsigned image=(shift ? kBarWarn : kBarBase)+bars;
-#endif
         if (image!=bar_) {
             updateModel(54u,bmw::ImageID(image));
             bar_=image;
@@ -111,9 +101,7 @@ class ShiftDeck : public bmw::PluginApp {
             if (kph<0) strcpy(text,"--");
             else {
             int speed=(kph*621371+500000)/1000000;
-#ifdef NATIVE_SHIFT_SMOOTH
             if (metric_) speed=kph;
-#endif
             snprintf(text,sizeof text,"%d",speed);
         }
             digits(70u,3u,text,kDigitBase,false);
@@ -129,9 +117,7 @@ class ShiftDeck : public bmw::PluginApp {
         if (!event.readBool(show) || show==visible_) return true;
         visible_=show;
         frame_.sampled_ms=0;
-#ifdef NATIVE_SHIFT_SMOOTH
         rpm_started_=0;
-#endif
         if (show) retry_at_=0;
         else stopChild();
         draw(bd_mono_ms());
@@ -144,7 +130,6 @@ class ShiftDeck : public bmw::PluginApp {
         draw(bd_mono_ms());
         return true;
     }
-#ifdef NATIVE_SHIFT_SMOOTH
     template <bool Metric> bool setUnits(const bmw::Parcel&) {
         metric_=Metric;
         saveGaugePreferences(kPreferences, target_, metric_);
@@ -153,7 +138,6 @@ class ShiftDeck : public bmw::PluginApp {
         draw(bd_mono_ms());
         return true;
     }
-#endif
     void showTarget() {
         char text[48];
         snprintf(text,sizeof text,"Shift light at %u RPM",kShiftTargets[target_]);
@@ -169,10 +153,8 @@ public:
           visible_(false),target_(kDefaultTarget),retry_at_(0),bar_(0),lights_(0),
           rpm_(-2),kph_(-2),shift_(false),metric_(false) {
         memset(&frame_,0,sizeof frame_);
-#ifdef NATIVE_SHIFT_SMOOTH
         rpm_from_=0;
         rpm_started_=0;
-#endif
     }
     virtual ~ShiftDeck() { shutdown(); }
     virtual bool onFinalize() { shutdown(); return true; }
@@ -212,13 +194,11 @@ public:
         action.m_exec=&Action::execImpl<ShiftDeck,&ShiftDeck::setTarget<4> >;
         addHandler(45u,action);
         loadGaugePreferences(kPreferences, sizeof kShiftTargets / sizeof kShiftTargets[0], target_, metric_);
-#ifdef NATIVE_SHIFT_SMOOTH
         action.m_exec=&Action::execImpl<ShiftDeck,&ShiftDeck::setUnits<false> >;
         addHandler(46u,action);
         action.m_exec=&Action::execImpl<ShiftDeck,&ShiftDeck::setUnits<true> >;
         addHandler(47u,action);
         updateModel(64u,bmw::ImageID(metric_ ? 56660u : 55916u));
-#endif
         updateModel(57u,bmw::ImageID(kShiftOff));
         showTarget();
         draw(bd_mono_ms());
@@ -245,14 +225,12 @@ public:
             if (n==sizeof next && visible_ && next.sampled_ms>=frame_.sampled_ms &&
                 next.sampled_ms<=now && next.rpm>=-1 && next.rpm<=16383 &&
                 next.kph>=-1 && next.kph<=255) {
-#ifdef NATIVE_SHIFT_SMOOTH
                 if (next.rpm!=frame_.rpm) {
                     const bool continuous=next.rpm>=0 && frame_.rpm>=0 && frame_.sampled_ms &&
                                           now-frame_.sampled_ms<DRIVE_STALE_MS;
                     rpm_from_=continuous ? animatedRpm(now) : next.rpm;
                     rpm_started_=continuous ? now : 0;
                 }
-#endif
                 frame_=next;
             }
         }

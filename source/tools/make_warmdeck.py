@@ -8,7 +8,7 @@ from PIL import Image, ImageDraw
 
 from make_bars import add_props
 
-PLUGIN = Path(__file__).resolve().parents[1] / "plugin"
+PLUGIN = Path(__file__).resolve().parents[1] / "native" / "manifests"
 
 
 def main():

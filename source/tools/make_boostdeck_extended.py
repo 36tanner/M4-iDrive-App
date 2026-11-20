@@ -9,10 +9,10 @@ from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 
 from make_bars import COLORS, MULTICOLOR, THEMES
 
-ROOT = Path(__file__).resolve().parents[1]
-XML = ROOT / "plugin/BoostDeck.xml"
+ROOT = Path(__file__).resolve().parents[1] / "native"
+XML = ROOT / "manifests/BoostDeck.xml"
 SIGNALS = re.findall(r'^SIGNAL\(\w+, "([^"]+)"',
-                     (ROOT / "src/boost_signals.def").read_text(), re.M)
+                     (ROOT / "src/common/boost_signals.def").read_text(), re.M)
 SLOTS = 9
 BACKGROUND = 56300
 BAR_EMPTY = 55000
