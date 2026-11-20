@@ -121,7 +121,12 @@ public:
 };
 
 void EngineCodes::startCodes(bool clear) {
-    if (codes_fd_>=0 || codes_pid_>0) return;
+    reapWorker();
+    if (codes_fd_>=0) return;
+    if (codes_pid_>0) {
+        updateModel(80u,bmw::BasicString<char>("Finishing previous diagnostics. Try again in a moment."));
+        return;
+    }
     int channel[2];
     if (pipe(channel)<0) {
         updateModel(80u,bmw::BasicString<char>("Could not start diagnostics"));

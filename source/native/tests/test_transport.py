@@ -45,12 +45,17 @@ class TransportTest(unittest.TestCase):
         server.listen(1)
         server.settimeout(4)
         requests, errors = [], []
+        paced_delays = []
 
         def gateway():
             try:
                 conn, _ = server.accept()
                 with conn:
                     conn.settimeout(3)
+                    if mode == "paced":
+                        # Measure collector scheduling against the fixture's 30 ms delay.
+                        # The separate fragmentation test exercises TCP buffering.
+                        conn.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
                     while True:
                         first = conn.recv(1)
                         if not first:
@@ -93,7 +98,9 @@ class TransportTest(unittest.TestCase):
                                 payload += b"\xaa"
                             result = bytes([ecu, 0xF4, 0x62]) + req[3:] + payload
                         if mode == "paced":
+                            started = time.monotonic()
                             time.sleep(.030)
+                            paced_delays.append((time.monotonic() - started) * 1000.0)
                         raw = frame(1, result)
                         # Fragment both header and body to catch partial-read bugs.
                         for part in (raw[:2], raw[2:7], raw[7:]):
@@ -116,6 +123,7 @@ class TransportTest(unittest.TestCase):
             self.assertFalse(t.is_alive())
             if errors:
                 raise errors[0]
+            self.paced_delays = paced_delays
             return packet, requests, result.stderr
         finally:
             udp.close()
@@ -141,10 +149,14 @@ class TransportTest(unittest.TestCase):
         self.assertEqual(int(packet[3]), 255)
         self.assertEqual(len(packet), 21)  # eight pairs of values and ages
         self.assertNotIn(bytes.fromhex("f4120152"), requests)
+        # Correct for host timer coalescing in the mock gateway. Keep the same
+        # collector budget at the intended delay, including the slow DID reads.
+        mean_delay = sum(self.paced_delays) / len(self.paced_delays)
+        scheduling_budget = 215 + 6 * max(0, mean_delay - 30)
         for did in ("4205", "5889", "4A49", "56D7", "586F"):
             samples = re.findall(rf"RAW mono_ms=(\d+) ecu=12 did={did}", trace)
             self.assertEqual(len(samples), 32)
-            self.assertLess((int(samples[-1])-int(samples[1]))/30, 215)
+            self.assertLess((int(samples[-1])-int(samples[1]))/30, scheduling_budget)
         for did in ("580F", "DA12", "4300"):
             samples = re.findall(rf"RAW mono_ms=(\d+) ecu=\w+ did={did}", trace)
             gaps = [int(b)-int(a) for a,b in zip(samples[1:], samples[2:])]

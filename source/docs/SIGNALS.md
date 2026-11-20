@@ -21,6 +21,15 @@ The two `--extended` channels are standard SAE J1979 PIDs, not BMW DIDs. On an F
 
 The worker enforces data length, plausibility limits, and freshness. Look at the code for exact bounds and units. If the DME reports coolant via `01 05`, confirm that reading against the intended coolant channel before adding an explicit fallback. An OBD PID and a BMW DID are distinct requests with distinct reply formats. [Request table](../native/src/collector.c) · [Decoder](../native/src/gauge_core.c)
 
+## WarmDeck
+
+WarmDeck uses OBD `01 5C` (oil), `01 05` (coolant) and the existing HSFZ EGS
+`22 DA12` decoder (transmission). Each reading expires independently. MOST can
+supply DME temperatures where supported. The transmission tile requires HSFZ.
+If any required reading is unavailable, WarmDeck waits for it before showing a
+complete warm-up estimate. The display estimates warm-up from measured trends
+and uses 85/75/40 °C as its own thresholds.
+
 
 ## BoostDeck selectable OBD readings
 

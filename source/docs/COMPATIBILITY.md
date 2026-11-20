@@ -4,7 +4,7 @@ Match the reported firmware and both SHA-256 hashes before using the dashboard p
 
 ## Desktop installer profiles
 
-The installer accepts the exact firmware and framework pairs in [installer-profiles.json](installer-profiles.json). Reported results apply to the named menus and vehicles.
+The installer checks firmware and framework pairs against [installer-profiles.json](installer-profiles.json). Reported results apply to the named menus and vehicles.
 
 | NBTevo firmware | AppFramework SHA-256 | CoreFramework SHA-256 | Evidence |
 | --- | --- | --- | --- |
@@ -43,7 +43,7 @@ The installer accepts the exact firmware and framework pairs in [installer-profi
 
 | Firmware | Evidence needed |
 | --- | --- |
-| J16383I | The 1280 × 480 request in [#86](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/86) supplies a version and display. Both framework hashes are still needed. |
+| J16383I | The 1280 × 480 request in [#86](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/86) supplies a version and display. A submitted Trio capture contains both hashes. The pair is distinct from the existing installer profiles and is recorded as capture-only. |
 | K17052I | [#34](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/34) supplies the screen version. Both framework hashes and the active display size are still needed. |
 | V20153J | [#25](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/25) reports that the ABI resolves. Both exact framework hashes and display size are still needed. V20153I is a different profile. |
 | W202xxI | [#97](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/97) reports a working installation and a BEAMer module issue. The complete firmware code, both framework hashes, and display size are still needed. |
@@ -87,8 +87,40 @@ Open points:
 The Status command reports whether DSC identification timed out, returned a UDS refusal, or identified an unsupported SGBD index. This distinguishes the missing replies in [issue #23](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/23) from an identified 0F2100 in [issue #25](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/25). Mode changes retain the stationary Park checks, with the engine off except on 0F1860. The write allowlist is 0F2510, 0F2850, and 0F1860 (F-series DSC_25). For 0F1860, `dsc_25.prg` defines 0xDBE1 as LMV_FUNKTION (1 active, 0 inactive for the current terminal 15 cycle). The worker first verifies the tested LMV 0F1480 transfer case. This LMV rejects 0xDB32 with NRC 31. The readback is the LMV target qualifier in 0x4002 byte 3 (`lmv_01.prg` STATUS_SOLLMOMENT): 0x20 applies the DSC target, 0x28 opens the clutch, 0x70 is rear-wheel drive. With the engine off, DSC_25 reports 0xDBE1 = 0 and the LMV reports 0x60 (fallback), so on 0F1860 the switch requires the engine running, stationary, and Park. The restore button also writes 0xDBE1 = 1 on 0F1860, as `dsc_25.prg` allows; the owner of the test car confirmed that it restores AWD, and an ignition cycle also restores AWD. On a 2018 F-series car, the write took more than 2 s to acknowledge; 0x4002 changed from 0x20 to 0x28, and front-axle actual torque (0x4003) stayed at its zero value up to 52 km/h. The immediate AWD restore is limited to 0F2850, as in the [upstream measurements and implementation](https://github.com/cauliflowermossgrape/idrive7-apps/blob/main/apps/live_adjustments/xdrive.js), and 0F1860.
 
 
+FreZZZeR cross-checked the factory `dsc_25.prg` and `lmv_01.prg` definitions. The
+LMV 0x4002 qualifier also reports 0x61 for fallback with RTA calibration, 0x62 for
+fallback with clutch opening, 0x80 for initialization, 0xE0 for standby, and 0xFF for
+an invalid target. A DSC `48097D` describes an open transfer-case clutch and
+rear-wheel drive only. It is consistent with commanded RWD. zelnkup's follow-up
+drive logged zero front torque and qualifier 0x28 throughout, with no DSC fault
+recorded. A `48097D` entry is therefore optional evidence of the commanded state.
+[Factory-data cross-check](https://github.com/inotbarnacle/ID6_apps_prerelease/pull/87#issuecomment-7036793563) · [Drive log follow-up](https://github.com/inotbarnacle/ID6_apps_prerelease/pull/87#issuecomment-7036949770)
+
+For the N57 F3x reports, LMV `440113` or `440114` would point to a transfer-case
+variant mismatch. That explanation is still a hypothesis for the affected cars.
+DSC `480682`, `48068C`, and `480AB5` concern unknown clutch position, temporary
+clutch disablement, or protection. LMV `440117` and `440118` concern temporary
+transfer-case deactivation. The write allowlist retains its existing scope. For DSC_25/LMV
+0F1480 pair, the EGS Park reply is 00 01 with the engine running. The engine-off
+branches still require 00 06. RPM and zero-speed checks also have to pass.
+[Park reply measurements and fix](https://github.com/inotbarnacle/ID6_apps_prerelease/pull/114) · [N57 compatibility discussion](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/68)
+
+## New compatibility submissions
+
+| Firmware | Evidence | Installer status |
+| --- | --- | --- |
+| Y24073J | Both submissions match the existing framework pair. One capture reports 1440 × 540. [Issue #105](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/105) | Existing profile |
+| Y22292I | The submitted framework bytes match both report digests and the existing profile. [Issue #59](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/59) | Existing profile |
+| J16383I | One submitted capture reports a distinct pair. [Issue #86](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/86) | Capture-only |
+| O18184I | Both captures agree on a distinct pair. One reports 1440 × 540 over split-node SSH. | Capture-only |
+| W20204I | Both frameworks match V20153I. trulex submitted the installer profile. mohamaddude1 reported BoostDeck, ShiftDeck and Engine Fault Codes working on an F90. [PR #112](https://github.com/inotbarnacle/ID6_apps_prerelease/pull/112) · [Issue #104](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/104) | Exact-hash alias |
+
+The installer recognises capture-only pairs and reports that they require a native ABI check and parked runtime validation before staging.
+
 ## Reported Bootmod3 and HUD compatibility limits
 
 - Bootmod3 Suite reads the active slot automatically when the map page opens and after each selection, after identifying a supported CustomROM. The ID6 candidate imports newer marker layouts and profile metadata from [iDrive7 Engine Config](https://github.com/cauliflowermossgrape/idrive7-apps/blob/35bca28bc82b30482d73782877ebaf92c69dcb8c/apps/live_adjustments/bm3_protocol.js). For an unsupported dynamic DID, it tries the same fixed marker via a direct diagnostic read. This covers the refusal reported in [issue #95](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/95) in simulation. Whether the S55 accepts the direct read and matches a supported ROM still needs a parked test.
 - An unsupported DSC can report the DSC, LMV, and VIP module indexes via **Refresh status**. Upstream has a distinct [G-series VIP control path](https://github.com/cauliflowermossgrape/idrive7-apps/blob/35bca28bc82b30482d73782877ebaf92c69dcb8c/apps/live_adjustments/README.md#xdrive-experimental). The ID6 candidate keeps its existing DSC and LMV write allowlist.
-- HUD Gauges accepts a verified gateway IPv4 address and distinguishes missing vehicle data from an overlay rejection. The F06 and F16 in [issue #82](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/82) and [issue #36](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/36) reject the reference HUD text handle. Their layouts still need a parked capture of the factory HUD handle setup.
+- HUD Gauges accepts a verified gateway IPv4 address and distinguishes missing vehicle data from an overlay rejection. The F06 and F16 in [issue #82](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/82) and [issue #36](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/36) reject the reference HUD text handle. The worker checks the reference text handle before changing visibility or drawing. Their layouts still need a parked capture of the factory HUD handle setup. st1ng's [CarPlay Advanced protocol notes](https://github.com/st1ng/nbtevo-carplay-advanced/blob/main/AGENTS.md) describe observing the factory handle setup, and document why the fixed 6WA handles cannot be assumed across clusters.
+- HUD Gauges starts only when enabled for the current HMI session. The worker checks for native NBT-AAD and the CarPlay Advanced HUD hook before registering on MOST. BoostDeck, ShiftDeck, LaunchDeck and WarmDeck retain HSFZ diagnostics when native NBT-AAD is present. Their MOST fallback is disabled in that configuration. HUD Gauges yields its MOST client when a dashboard needs the MOST diagnostics tunnel. The affected combinations still need an on-car check. [Issue #22](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/22) · [Issue #105](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/105)
+- HUD uses the active dashboard worker's RPM stream. BoostDeck can also share a current boost reading from its selected channels over HSFZ. ShiftDeck shares RPM only. The HUD overlay also pauses while LaunchDeck or WarmDeck uses the link. [Issue #27](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/27) · [Issue #88](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/88) · [Issue #107](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/107)

@@ -5,7 +5,7 @@
 #include "dial_scales.h"
 #include "diagnostic_worker.h"
 #include "diagnostic_gateway.h"
-#include "gauge_preferences.h"
+#include "boost_preferences.h"
 #include <arpa/inet.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -39,6 +39,30 @@ const unsigned kBarCount = 9;
 const unsigned kVerticalSlot = 8;
 const unsigned kVerticalFirst = 56100;
 const unsigned kVerticalSteps = 20;
+const unsigned kTransparent = 57000;
+const unsigned kDialFirst = 57001;
+const unsigned kCircularSteps = 12;
+const unsigned kAlertSignals[] = {BD_COOLANT, BD_OIL_TEMP, BD_OIL};
+const char* const kSettingLabels[] = {
+    "Pressure", "Speed", "Temperature", "Gauge style", "Alert mode",
+    "Coolant high", "Oil temp high", "Oil pressure low"
+};
+
+void settingValue(const BoostPreferences& prefs, unsigned row, unsigned choice, char* text, size_t size) {
+    static const char* const values[][3]={
+        {"psi","bar","kPa"}, {"mph","km/h",0}, {"\260F","\260C",0},
+        {"Bars","Circular dials",0}, {"Screen + soft chime","Screen only",0},
+    };
+    if (row<BOOST_COOLANT_ALERT) snprintf(text,size,"%s",values[row][choice]);
+    else if (!choice) snprintf(text,size,"Off");
+    else {
+        const unsigned alarm=row-BOOST_COOLANT_ALERT, signal=kAlertSignals[alarm];
+        const unsigned units=prefs.units(signal);
+        const double value=bd_display_selected(signal,boostAlertThreshold(alarm,choice),units);
+        const int decimals=units==1 ? (alarm==2 ? 2 : 1) : 0;
+        snprintf(text,size,"%.*f %s",decimals,value,bd_unit_selected(signal,units));
+    }
+}
 const char kAssignments[] = "/var/opt/hmi/data/ID5/BoostDeck.signals";
 
 }
@@ -51,8 +75,11 @@ class BoostDeck : public bmw::PluginApp {
     pid_t collector_;
     bool stopping_;
     bool gauges_visible_;
-    unsigned color_;
-    bool metric_;
+    BoostPreferences preferences_;
+    BoostAlerts alerts_;
+    pid_t tone_;
+    uint64_t last_tone_;
+    unsigned alert_mask_;
     uint64_t retry_at_;
     unsigned char signals_[2][kBarCount];
     bool diesel_;
@@ -62,17 +89,20 @@ class BoostDeck : public bmw::PluginApp {
     bool saveAssignments();
     void assignmentsChanged();
     void startVisibleCollector();
-    void selectColor(unsigned color);
+    void updateSettings();
+    void updateAlerts(uint64_t now, uint64_t elapsed);
+    void stopTone();
+    void reapTone();
+    void restartCollector();
     char labels_[kBarCount][128];
-    unsigned images_[kBarCount];
+    unsigned images_[kBarCount], dials_[kBarCount];
     void postPoll();
 public:
     BoostDeck(bmw::IDispatcher& d, bmw::BasicString<char> name, unsigned maj, unsigned mn,
               bmw::RHMIInterfaceVersion rhmi, const bmw::Bundle& cfg, const bmw::Bundle& res)
         : bmw::PluginApp(d,name,maj,mn,rhmi,cfg,res), fd_(-1), poll_generation_(0),
           received_(0), collector_(-1), stopping_(false), gauges_visible_(false),
-          color_(0),
-          metric_(false),
+          tone_(-1), last_tone_(0), alert_mask_(0),
           retry_at_(0), diesel_(false), editing_(kBarCount) {
         resetDisplay();
     }
@@ -82,13 +112,31 @@ public:
     virtual bool invokeDataUpdate(unsigned key, const bmw::Parcel& data);
     bool gaugeVisibility(const bmw::Parcel&);
     template <unsigned Color> bool changeColor(const bmw::Parcel&) {
-        saveGaugePreferences(kPreferences, Color, metric_);
-        selectColor(Color);
+        BoostPreferences changed=preferences_;
+        changed.color=Color;
+        if (changed.save(kPreferences)) {
+            preferences_=changed;
+            updateModel(118u,bmw::BasicString<char>(""));
+        } else updateModel(118u,bmw::BasicString<char>("Could not save settings"));
+        updateSettings();
+        refresh();
         return true;
     }
-    template <bool Metric> bool changeUnits(const bmw::Parcel&) {
-        metric_=Metric;
-        saveGaugePreferences(kPreferences, color_, metric_);
+    template <unsigned Row, unsigned Choice> bool changeSetting(const bmw::Parcel&) {
+        if (preferences_.choice[Row]==Choice) return true;
+        BoostPreferences changed=preferences_;
+        changed.choice[Row]=Choice;
+        if (!changed.save(kPreferences)) {
+            updateModel(118u,bmw::BasicString<char>("Could not save settings"));
+            return true;
+        }
+        preferences_=changed;
+        if (Row>=BOOST_COOLANT_ALERT) {
+            alerts_.reset(Row-BOOST_COOLANT_ALERT);
+            restartCollector();
+        }
+        updateModel(118u,bmw::BasicString<char>(""));
+        updateSettings();
         refresh();
         return true;
     }
@@ -142,11 +190,13 @@ public:
     void shutdown() {
         gauges_visible_=false;
         stopCollector();
+        stopTone();
         if (fd_>=0) { close(fd_); fd_=-1; }
     }
     void resetDisplay() {
         memset(&frame_,0,sizeof frame_); memset(labels_,0,sizeof labels_);
         memset(images_,0,sizeof images_);
+        memset(dials_,0,sizeof dials_);
         received_=0;
     }
     void refresh();
@@ -190,10 +240,26 @@ bool BoostDeck::onInit() {
         action.m_exec=colorHandlers[i];
         addHandler(40u+i,action);
     }
-    action.m_exec=&Action::execImpl<BoostDeck,&BoostDeck::changeUnits<false> >;
-    addHandler(49u,action);
-    action.m_exec=&Action::execImpl<BoostDeck,&BoostDeck::changeUnits<true> >;
-    addHandler(59u,action);
+    static const Handler settingHandlers[][10]={
+#define C(row, choice) &Action::execImpl<BoostDeck,&BoostDeck::changeSetting<row, choice> >
+#define TWO(row) C(row, 0), C(row, 1)
+#define SIX(row) TWO(row), C(row, 2), C(row, 3), C(row, 4), C(row, 5)
+#define TEN(row) SIX(row), C(row, 6), C(row, 7), C(row, 8), C(row, 9)
+        {TWO(BOOST_PRESSURE), C(BOOST_PRESSURE, 2)}, {TWO(BOOST_SPEED)},
+        {TWO(BOOST_TEMPERATURE)}, {TWO(BOOST_STYLE)}, {TWO(BOOST_CHIME)},
+        {TEN(BOOST_COOLANT_ALERT)}, {TEN(BOOST_OIL_TEMP_ALERT)},
+        {SIX(BOOST_OIL_PRESSURE_ALERT)}
+#undef TEN
+#undef SIX
+#undef TWO
+#undef C
+    };
+    for (unsigned row=0;row<BOOST_SETTING_COUNT;++row) {
+        for (unsigned choice=0;choice<kBoostChoices[row];++choice) {
+            action.m_exec=settingHandlers[row][choice];
+            addHandler(2400u+20u*row+choice,action);
+        }
+    }
     action.m_exec=&Action::execImpl<BoostDeck,&BoostDeck::changeProfile<false> >;
     addHandler(502u,action);
     action.m_exec=&Action::execImpl<BoostDeck,&BoostDeck::changeProfile<true> >;
@@ -217,8 +283,8 @@ bool BoostDeck::onInit() {
         action.m_exec=changes[i];
         addHandler(600u+i,action);
     }
-    loadGaugePreferences(kPreferences, sizeof kColorNames / sizeof kColorNames[0], color_, metric_);
-    selectColor(color_);
+    preferences_.load(kPreferences, sizeof kColorNames / sizeof kColorNames[0]);
+    updateSettings();
     updateAssignments();
     if (fd_>=0) {
         ++poll_generation_;
@@ -236,6 +302,7 @@ bool BoostDeck::gaugeVisibility(const bmw::Parcel& event) {
         startVisibleCollector();
     } else {
         stopCollector();
+        stopTone();
         received_=0;
         memset(&frame_,0,sizeof frame_);
         refresh();
@@ -249,6 +316,9 @@ void BoostDeck::startVisibleCollector() {
     const DiagnosticGateway gateway("/var/opt/hmi/data/ID5/Plugins/" "BoostDeck" "/gateway-ip.txt");
     unsigned mask=0;
     for (unsigned i=0;i<kBarCount;++i) mask |= 1u << signals_[diesel_][i];
+    for (unsigned i=0;i<3;++i)
+        if (preferences_.choice[BOOST_COOLANT_ALERT+i]) mask |= 1u<<kAlertSignals[i];
+    if (preferences_.choice[BOOST_OIL_PRESSURE_ALERT]) mask |= 1u<<BD_RPM;
     char selected[16];
     snprintf(selected,sizeof selected,"%u",mask);
     const char *args[]={kCollector,"--host",gateway.host(),"--session","--signals",selected,
@@ -260,12 +330,71 @@ void BoostDeck::startVisibleCollector() {
     retry_at_=bd_mono_ms()+2000;
 }
 
-void BoostDeck::selectColor(unsigned color) {
-    color_=color;
-    char label[48];
-    snprintf(label,sizeof label,"Selected: %s",kColorNames[color_]);
+void BoostDeck::updateSettings() {
+    char label[80];
+    snprintf(label,sizeof label,"Gauge color: %s",kColorNames[preferences_.color]);
     updateModel(110u,bmw::BasicString<char>(label));
-    refresh();
+    for (unsigned row=0;row<BOOST_SETTING_COUNT;++row) {
+        char value[32];
+        settingValue(preferences_,row,preferences_.choice[row],value,sizeof value);
+        snprintf(label,sizeof label,"%s: %s",kSettingLabels[row],value);
+        updateModel(120u+row,bmw::BasicString<char>(label));
+        for (unsigned choice=0;choice<kBoostChoices[row];++choice) {
+            settingValue(preferences_,row,choice,value,sizeof value);
+            updateModel(700u+row*20u+choice,bmw::BasicString<char>(value));
+        }
+    }
+}
+
+void BoostDeck::reapTone() {
+    if (tone_>0) {
+        pid_t ended=waitpid(tone_,0,WNOHANG);
+        if (ended==tone_ || (ended<0 && errno==ECHILD)) tone_=-1;
+    }
+}
+
+void BoostDeck::stopTone() {
+    reapTone();
+    if (tone_>0) kill(tone_,SIGTERM);
+}
+
+void BoostDeck::updateAlerts(uint64_t now, uint64_t elapsed) {
+    unsigned mask=0;
+    bool chime=false;
+    for (unsigned i=0;i<3;++i) {
+        const unsigned option=preferences_.choice[BOOST_COOLANT_ALERT+i];
+        const unsigned signal=kAlertSignals[i];
+        if (i==2 && received_ && bd_is_fresh(&frame_,BD_RPM,elapsed) && frame_.value[BD_RPM]<600)
+            alerts_.reset(i);
+        const bool valid=received_ && bd_is_fresh(&frame_,signal,elapsed) &&
+            (i!=2 || (bd_is_fresh(&frame_,BD_RPM,elapsed) && frame_.value[BD_RPM]>=600));
+        bool entered=false;
+        const uint64_t sample=valid && received_>frame_.age_ms[signal] ?
+            received_-frame_.age_ms[signal] : 0;
+        if (alerts_.evaluate(i,option!=0,sample!=0,frame_.value[signal],
+                             option ? boostAlertThreshold(i,option) : 0,sample,entered))
+            mask|=1u<<i;
+        chime=chime || entered;
+    }
+    if (mask!=alert_mask_) {
+        static const char* const text[]={"Coolant hot", "Oil temp high", "Oil pressure low"};
+        static const unsigned priority[]={2,0,1};
+        char banner[96]="";
+        for (unsigned i=0;i<3;++i) {
+            if (!(mask&(1u<<priority[i]))) continue;
+            if (*banner) strcat(banner," | ");
+            strcat(banner,text[priority[i]]);
+        }
+        updateModel(119u,bmw::BasicString<char>(banner));
+        updateModel(68u,bmw::ImageID(mask ? 56999u : kTransparent));
+        alert_mask_=mask;
+    }
+    if (chime && !preferences_.choice[BOOST_CHIME] && tone_<0 &&
+        (!last_tone_ || now-last_tone_>=12000)) {
+        const char* args[]={kCollector,"--alert-tone",0};
+        tone_=launch(args,-1);
+        last_tone_=now;
+    }
 }
 
 void BoostDeck::postPoll() {
@@ -290,6 +419,7 @@ bool BoostDeck::invokeDataUpdate(unsigned key, const bmw::Parcel& data) {
 
 void BoostDeck::poll() {
     reapCollector();
+    reapTone();
     startVisibleCollector();
     // A bounded non-blocking drain: at most 8 * 512 bytes per UI tick.
     char data[BD_MAX_PACKET];
@@ -337,14 +467,14 @@ void BoostDeck::loadAssignments() {
 void BoostDeck::updateAssignments() {
     for (unsigned i=0;i<kBarCount;++i) {
         char name[64];
-        snprintf(name,sizeof name,"Selected: %s",bd_name(signals_[diesel_][i]));
+        snprintf(name,sizeof name,"Gauge %u: %s",i+1,bd_name(signals_[diesel_][i]));
         updateModel(340u+i,bmw::BasicString<char>(name));
         const unsigned signal=signals_[diesel_][i];
         const char* caption=signal==BD_ETHANOL && i==kVerticalSlot ? "Active E" :
                             signal==BD_TRANS ? "Transmission" : bd_name(signal);
         updateModel(370u+i,bmw::BasicString<char>(caption));
     }
-    updateModel(360u,bmw::BasicString<char>(diesel_ ? "Selected: Diesel" : "Selected: Gasoline"));
+    updateModel(360u,bmw::BasicString<char>(diesel_ ? "Engine profile: Diesel" : "Engine profile: Gasoline"));
     refresh();
 }
 
@@ -354,34 +484,50 @@ bool BoostDeck::saveAssignments() {
     return savePersistentBytes(kAssignments,data,sizeof data);
 }
 
-void BoostDeck::assignmentsChanged() {
+void BoostDeck::restartCollector() {
     stopCollector();
-    resetDisplay();
+    received_=0;
+    memset(&frame_,0,sizeof frame_);
     retry_at_=0;
+}
+
+void BoostDeck::assignmentsChanged() {
+    restartCollector();
+    for (unsigned i=0;i<3;++i) alerts_.reset(i);
     updateAssignments();
 }
 
 void BoostDeck::refresh() {
-    uint64_t elapsed=received_ ? bd_mono_ms()-received_ : static_cast<uint64_t>(BD_STALE_MS);
+    const uint64_t now=bd_mono_ms();
+    const uint64_t elapsed=received_ ? now-received_ : static_cast<uint64_t>(BD_STALE_MS);
+    updateAlerts(now,elapsed);
+    const bool circular=preferences_.choice[BOOST_STYLE]!=0;
     for (unsigned i=0;i<kBarCount;++i) {
         const unsigned signal=signals_[diesel_][i];
         char label[128];
         const bool vertical=i==kVerticalSlot;
         const unsigned steps=vertical ? kVerticalSteps : kDialSteps;
-        unsigned image=vertical ? kVerticalFirst : kBarFirst;
+        unsigned image=circular ? kTransparent : vertical ? kVerticalFirst : kBarFirst;
+        unsigned dial=circular ? kDialFirst : kTransparent;
         if (received_ && bd_is_fresh(&frame_,signal,elapsed)) {
             const double value=frame_.value[signal];
-            const char *unit=bd_unit(signal,metric_);
-            double reading=bd_display_value(signal,value,metric_);
+            const unsigned units=preferences_.units(signal);
+            const char *unit=bd_unit_selected(signal,units);
+            double reading=bd_display_selected(signal,value,units);
             if (signal==BD_BOOST && fabs(reading)<0.05) reading=0;
             const int decimals=signal==BD_BATTERY || signal==BD_LAMBDA_TARGET ? 2 :
                 signal==BD_RPM || signal==BD_RAIL || signal==BD_ETHANOL ? 0 : 1;
             snprintf(label,sizeof label,"%.*f%s%s",decimals,reading,
                      *unit && *unit!='%' ? " " : "",unit);
-            const unsigned step=(bd_bar(signal,value)*steps+500)/1000;
-            if (step) {
-                const unsigned palette=!vertical && color_==kMulticolor ? kMulticolor+i : color_;
-                image+=palette*steps+step;
+            const unsigned color=preferences_.color;
+            const unsigned palette=color==kMulticolor ? kMulticolor+(i%8) : color;
+            const int fill=bd_bar(signal,value);
+            if (circular) {
+                const unsigned step=(fill*kCircularSteps+500)/1000;
+                dial+=1+palette*(kCircularSteps+1)+step;
+            } else {
+                const unsigned step=(fill*steps+500)/1000;
+                if (step) image+=(vertical ? color : palette)*steps+step;
             }
         } else {
             strcpy(label,"--");
@@ -389,6 +535,10 @@ void BoostDeck::refresh() {
         if (image!=images_[i]) {
             updateModel(320u+i,bmw::ImageID(image));
             images_[i]=image;
+        }
+        if (dial!=dials_[i]) {
+            updateModel(330u+i,bmw::ImageID(dial));
+            dials_[i]=dial;
         }
         if (strcmp(label,labels_[i])) {
             updateModel(300u+i,bmw::BasicString<char>(label));

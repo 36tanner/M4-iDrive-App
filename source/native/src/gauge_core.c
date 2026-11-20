@@ -229,6 +229,23 @@ const char *bd_unit(unsigned i, int metric) {
     }
 }
 
+int bd_is_pressure(unsigned i) {
+    return i < BD_COUNT && (signals[i].unit==PRESSURE_PSI ||
+                            signals[i].unit==PRESSURE_BAR || signals[i].unit==PRESSURE_KPA);
+}
+
+double bd_display_selected(unsigned i, double x, unsigned selection) {
+    if (!bd_is_pressure(i)) return bd_display_value(i, x, selection != 0);
+    double bar = signals[i].unit==PRESSURE_PSI ? x / 14.5037738 :
+                 signals[i].unit==PRESSURE_KPA ? x / 100.0 : x;
+    return selection==2 ? bar * 100.0 : selection==1 ? bar : bar * 14.5037738;
+}
+
+const char *bd_unit_selected(unsigned i, unsigned selection) {
+    if (!bd_is_pressure(i)) return bd_unit(i, selection != 0);
+    return selection==2 ? "kPa" : selection==1 ? "bar" : "psi";
+}
+
 int bd_bar(unsigned i, double x) {
     if (i >= BD_COUNT || !isfinite(x)) return 0;
     double y = (x - signals[i].lo) * 1000 / (signals[i].hi - signals[i].lo);

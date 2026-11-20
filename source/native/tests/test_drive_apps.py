@@ -34,6 +34,8 @@ class DriveAppsTest(unittest.TestCase):
                             self.assertEqual(exact(conn, size), bytes.fromhex("f4"+ecu+request))
                             for response in responses:
                                 conn.sendall(frame(1, bytes.fromhex(ecu+"f4"+response)))
+                        if transactions and not transactions[-1][1]:
+                            conn.shutdown(socket.SHUT_WR)
                         self.assertEqual(conn.recv(1), b"", "Unexpected repeat or extra command")
                 except Exception as error:
                     errors.append(error)
@@ -67,6 +69,38 @@ class DriveAppsTest(unittest.TestCase):
                                          [("2f01"+index, ["6f01"+index])])
                 self.assertEqual(result, f"Accepted by DME: Map {slot}\n")
 
+    def test_clear_fault_memory_rechecks_before_restoring_session(self):
+        result=self.run_worker("engine-codes", ["--clear"], [
+            ("14ffffff", ["7f147f"]), ("1003", ["5003003201f4"]),
+            ("14ffffff", ["7f1478", "54"]),
+            ("1902af", ["5902ff1234562f"]), ("1001", ["5001003201f4"]),
+        ])
+        self.assertEqual(result,"Clear accepted; 1 engine code remains\n123456  status 2F\n")
+
+    def test_clear_fault_memory_rechecks_after_busy_without_duplicate_write(self):
+        result=self.run_worker("engine-codes", ["--clear"], [
+            ("14ffffff", ["7f1421"]), ("14ffffff", ["54"]),
+            ("1902af", ["7f1921"]), ("1902af", ["5902ff"]),
+        ])
+        self.assertEqual(result,"Clear accepted; 0 engine codes remain\n")
+
+    def test_clear_fault_memory_does_not_retry_an_unconfirmed_write(self):
+        result=self.run_worker("engine-codes", ["--clear"], [("14ffffff", [])])
+        self.assertEqual(result,"Clear unconfirmed. Read engine codes before retrying.\n")
+
+    def test_warmdeck_reads_each_temperature_independently(self):
+        with socket.socket(socket.AF_INET,socket.SOCK_DGRAM) as listener:
+            listener.bind(("127.0.0.1",42862))
+            listener.settimeout(2)
+            self.run_worker("warmdeck-collector", ["--cycles","1"], [
+                ("015c", ["415c7d"]), ("0105", ["7f0112"]), ("22da12", ["62da120058"]),
+            ], targets=["12","12","18"])
+            oil, coolant, trans, oil_c, _, trans_c=struct.unpack("=QQQddd", listener.recv(64))
+            self.assertGreater(oil,0)
+            self.assertEqual(coolant,0)
+            self.assertGreaterEqual(trans,oil)
+            self.assertEqual((oil_c,trans_c),(85.0,40.0))
+
     def test_shift_worker_decodes_live_rpm_and_speed(self):
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as listener:
             listener.bind(("127.0.0.1", 0))
@@ -77,6 +111,39 @@ class DriveAppsTest(unittest.TestCase):
             self.assertGreater(sampled_ms, 0)
             self.assertEqual((rpm,kph), (6250,100))
 
+
+    def test_shift_worker_shares_rpm_with_hud(self):
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as hud, \
+                socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as display:
+            hud.bind(("127.0.0.1", 42870))
+            hud.settimeout(2)
+            display.bind(("127.0.0.1", 0))
+            self.run_worker("shift-deck", ["--cycles", "1", "--udp-port", str(display.getsockname()[1])],
+                            [("010c", ["410c61a8"]), ("010d", ["410d64"])])
+            data, peer = hud.recvfrom(64)
+            timestamp, source, flags, rpm, boost = struct.unpack("=QIIIi", data)
+            self.assertGreater(timestamp, 0)
+            self.assertEqual(peer, ("127.0.0.1", 42872))
+            self.assertEqual((source, flags, rpm, boost), (42872, 1, 6250, 0))
+
+    def test_dashboard_requests_most_from_hud_before_fallback(self):
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as hud, \
+                socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as display:
+            hud.bind(("127.0.0.1", 42874))
+            hud.settimeout(2)
+            display.bind(("127.0.0.1", 0))
+            display.settimeout(0.25)
+            proc = self.start_most("shift-deck", display.getsockname()[1])
+            try:
+                self.assertEqual(hud.recv(8), b"\x01")
+                with self.assertRaises(socket.timeout):
+                    display.recv(64)
+                hud.close()
+                display.settimeout(6)
+                self.assertEqual(struct.unpack("=Qii", display.recv(64))[1], 1726)
+            finally:
+                codes, errors = self.stop_all([proc])
+            self.assertEqual(codes, [0], errors)
 
     def test_launch_worker_samples_speed_without_an_rpm_query(self):
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as listener:
@@ -147,12 +214,15 @@ class DriveAppsTest(unittest.TestCase):
 
         current = ident + [("22f150", ["62f1500f1480"]), ("224002", ["62400209c4200f"])]
         targets = ["29", "29", "19", "19", "18"]
-        result = self.run_worker("xdrive-control", ["--drive-mode", "0"],
-            current + [("22da2e", ["62da2e0005"])], targets=targets)
-        self.assertIn("confirmed Park", result)
+        # Measured on a DSC_25 car: DA2E byte 2 is 01 in Park with the engine running, 0a in R/N/D,
+        # and 06 only in Park with the engine off.
+        for gear in ("0005", "000a", "0006"):
+            result = self.run_worker("xdrive-control", ["--drive-mode", "0"],
+                current + [("22da2e", ["62da2e" + gear])], targets=targets)
+            self.assertIn("confirmed Park", result)
 
         result = self.run_worker("xdrive-control", ["--drive-mode", "0"],
-            current + [("22da2e", ["62da2e0006"]), ("010c", ["410c0c80"]), ("010d", ["410d00"]),
+            current + [("22da2e", ["62da2e0001"]), ("010c", ["410c0c80"]), ("010d", ["410d00"]),
                        ("2edbe100", ["6edbe1"]), ("224002", ["62400209c4280f"])],
             targets=targets + ["12", "12", "29", "19"])
         self.assertEqual(result, "Transfer case confirms RWD.\n")

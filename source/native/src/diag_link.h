@@ -13,7 +13,7 @@ struct diag_link_cfg { const char *host; unsigned port; int transport; int kind;
 struct diag_link {
     struct diag_link_cfg cfg;
     int fd, lock;                     /* HSFZ connection and lease lock, -1 when closed */
-    int on_most, most_usable, lost;
+    int on_most, most_usable, lost, gauge_most_lock;
     int hsfz_seen;                    /* HSFZ has connected: never switch to MOST */
     unsigned hsfz_fails;              /* failed HSFZ connects in a row */
     uint64_t retry_at, lease_until, most_retry_at;

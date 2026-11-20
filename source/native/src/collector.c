@@ -1,6 +1,7 @@
 #define _POSIX_C_SOURCE 200809L
 #include "gauge_core.h"
 #include "diagnostic_lease.h"
+#include "gauge_coexistence.h"
 #include "diag_link.h"
 #include <arpa/inet.h>
 #include <errno.h>
@@ -60,47 +61,86 @@ static int exchange(int fd, unsigned ecu, const unsigned char *uds, unsigned uds
 #elif defined(ENGINE_CODES_ONLY)
 #include "most/most_link.h"
 
+static void code_wait(unsigned ms) {
+    const uint64_t until=bd_mono_ms()+ms;
+    uint64_t now;
+    while (diag_running && (now=bd_mono_ms())<until) poll(0,0,(int)(until-now));
+}
+
+static void restore_code_session(struct diag_link *link) {
+    const unsigned char request[]={0x10,0x01}, prefix[]={0x50,0x01};
+    unsigned char response[16];
+    unsigned negative;
+    (void)diag_link_request(link,0x12,request,sizeof request,prefix,sizeof prefix,
+                            response,sizeof response,2000,&negative);
+}
+
 static void fault_codes(struct diag_link *link, int clear) {
     /* Fault, pending, confirmed, failed since clear, or warning requested.
      * Bits 0x10 and 0x40 only report incomplete tests. */
-    enum { fault_status = 0xaf };
+    enum { fault_status = 0xaf, clear_timeout = 15000 };
     const unsigned char read_request[]={0x19,0x02,fault_status}, read_reply[]={0x59,0x02};
     const unsigned char clear_request[]={0x14,0xff,0xff,0xff}, clear_reply[]={0x54};
     unsigned char reply[4094];
     unsigned negative;
     unsigned supported_fault_status;
-    int n, i, count=0, shown=0, full;
+    int n, i, count=0, shown=0, full, extended=0;
     if (!diag_link_up(link)) { puts("Diagnostic gateway unavailable"); return; }
     if (clear) {
-        n=diag_link_request(link,0x12,clear_request,4,clear_reply,1,reply,sizeof reply,8000,&negative);
-        // Retry a clear only after a session-related refusal and a positive session reply.
+        n=diag_link_request(link,0x12,clear_request,4,clear_reply,1,reply,sizeof reply,clear_timeout,&negative);
+        if (n==-2 && negative==0x21) {
+            // The ECU explicitly refused because it was busy. A timeout is never retried.
+            code_wait(350);
+            n=diag_link_request(link,0x12,clear_request,4,clear_reply,1,reply,sizeof reply,clear_timeout,&negative);
+        }
         if (n==-2 && (negative==0x22 || negative==0x31 || negative==0x7e || negative==0x7f)) {
-            const unsigned char extended[]={0x10,0x03}, extended_reply[]={0x50,0x03};
-            const unsigned char normal[]={0x10,0x01}, normal_reply[]={0x50,0x01};
+            const unsigned original_nrc=negative;
+            const unsigned char request[]={0x10,0x03}, prefix[]={0x50,0x03};
             unsigned session_nrc;
-            if (diag_link_request(link,0x12,extended,2,extended_reply,2,reply,sizeof reply,2000,&session_nrc)>=2) {
-                n=diag_link_request(link,0x12,clear_request,4,clear_reply,1,reply,sizeof reply,8000,&negative);
-                diag_link_request(link,0x12,normal,2,normal_reply,2,reply,sizeof reply,2000,&session_nrc);
-            }
+            const int session=diag_link_request(link,0x12,request,2,prefix,2,reply,sizeof reply,2000,&session_nrc);
+            if (session>=2) {
+                extended=1;
+                n=diag_link_request(link,0x12,clear_request,4,clear_reply,1,reply,sizeof reply,clear_timeout,&negative);
+            } else if (session==-2 && original_nrc!=0x22) {
+                printf("Clear refused (NRC %02X); extended session refused (%02X)\n",original_nrc,session_nrc);
+                return;
+            } else negative=original_nrc;
         }
         if (n!=1) {
+            if (extended) restore_code_session(link);
             if (n==-2 && (negative==0x22 || negative==0x83 || negative==0x88))
-                printf("Clear refused (NRC %02X). Try ignition on, engine off.\n",negative);
-            else if (n==-2) printf("Clear rejected (NRC %02X)\n",negative);
-            else puts("Clear result unknown: read codes again");
+                printf("Clear refused (NRC %02X). Park with ignition on and engine off.\n",negative);
+            else if (n==-2 && negative==0x33)
+                puts("Clear refused (NRC 33). The DME requires authorized diagnostics.");
+            else if (n==-2) printf("Clear rejected by DME (NRC %02X)\n",negative);
+            else puts("Clear unconfirmed. Read engine codes before retrying.");
             return;
         }
+        // The acknowledgement confirms the request. Allow fault memory to settle
+        // and verify in the same session before restoring its default.
+        code_wait(350);
     }
     n=diag_link_request(link,0x12,read_request,3,read_reply,2,reply,sizeof reply,1800,&negative);
-    if (n==-2) { printf("Read rejected (NRC %02X)\n",negative); return; }
+    if (clear && n<3 && diag_running) {
+        // Recheck is read-only. Reconnect on a lost HSFZ link without issuing another clear.
+        if (n==-1 && !diag_link_on_most(link)) diag_link_drop(link);
+        if (diag_link_up(link))
+            n=diag_link_request(link,0x12,read_request,3,read_reply,2,reply,sizeof reply,1800,&negative);
+    }
+    if (extended) restore_code_session(link);
+    if (n==-2) {
+        printf(clear ? "Clear accepted; recheck refused (NRC %02X)\n" : "Read rejected (NRC %02X)\n",negative);
+        return;
+    }
     full = diag_link_on_most(link) && n==MOST_INNER_MAX;   /* the tunnel reply filled its cap */
     if (full) n-=(n-3)%4;   /* it may end mid-record */
     if (n<3 || (n-3)%4!=0) { puts(clear ? "Clear acknowledged; recheck unavailable" : "No valid code response"); return; }
     supported_fault_status=reply[2] & fault_status;
     for (i=3;i<n;i+=4)
         if (reply[i+3] & supported_fault_status) ++count;
-    printf("Engine: %d %s%s\n",count,
-           count==1 ? "code" : "codes",clear ? " after clear" : "");
+    if (clear) printf("Clear accepted; %d engine %s remain%s\n",count,
+                      count==1 ? "code" : "codes",count==1 ? "s" : "");
+    else printf("Engine: %d %s\n",count,count==1 ? "code" : "codes");
     for (i=3;i<n && shown<128;i+=4) {
         if (!(reply[i+3] & supported_fault_status)) continue;
         printf("%02X%02X%02X  status %02X\n",reply[i],reply[i+1],reply[i+2],reply[i+3]);
@@ -285,7 +325,7 @@ int main(int argc, char **argv) {
     unsigned udp_port=DRIVE_PORT, cycles=0, count=0;
     pid_t parent=getppid();
     struct sockaddr_in dest;
-    int sock, i, lost, speed_only=0;
+    int sock, active, i, lost, speed_only=0;
 #ifdef NATIVE_FAST
     uint64_t speed_due=0;
     int last_speed=-1;
@@ -302,10 +342,15 @@ int main(int argc, char **argv) {
         else return 2;
     }
     if ((!cfg.host && cfg.transport==DIAG_HSFZ) || parent<=1) return 2;
+    if (speed_only) cfg.dsi_name = "launchdeck";
+    if (native_android_auto_installed()) cfg.transport = DIAG_HSFZ;
     diag_link_signals();
     diag_link_init(&link,&cfg);
+    const unsigned source = speed_only ? LAUNCH_ACTIVE_PORT : SHIFT_ACTIVE_PORT;
+    active = gauge_bind(source);
+    if (active < 0) return 1;
     sock=socket(AF_INET,SOCK_DGRAM,0);
-    if (sock<0) return 1;
+    if (sock<0) { close(active); return 1; }
     memset(&dest,0,sizeof dest);
     dest.sin_family=AF_INET;
     dest.sin_port=htons((uint16_t)udp_port);
@@ -335,9 +380,14 @@ int main(int argc, char **argv) {
                 f.sampled_ms=bd_mono_ms();
                 f.rpm=rpm;
                 f.kph=kph;
+                if (!speed_only) {
+                    struct hud_telemetry sample = { f.sampled_ms, source,
+                        rpm >= 0 ? HUD_SAMPLE_RPM : 0, rpm >= 0 ? (unsigned)rpm : 0, 0 };
+                    gauge_publish(active, &sample);
+                }
                 if (sendto(sock,&f,sizeof f,0,(struct sockaddr *)&dest,sizeof dest)!=(ssize_t)sizeof f) break;
-                diag_link_should_yield(&link,f.sampled_ms);
             }
+            (void)diag_link_should_yield(&link,bd_mono_ms());
         }
         diag_link_tick(&link);
         ++count;
@@ -351,11 +401,16 @@ int main(int argc, char **argv) {
     lost=diag_link_lost(&link);
     diag_link_close(&link);
     close(sock);
+    close(active);
     return lost ? 1 : 0;
 }
 #else
 #include "most/dsi_client.h"
 #include "most/most_link.h"
+
+#if defined(PERF_LAB) && defined(__QNX__)
+int boost_alert_tone(void);
+#endif
 
 static int trace_reads = 0;
 static void pause_ms(int ms) { while (diag_running && poll(0, 0, ms) < 0 && errno == EINTR) {} }
@@ -451,9 +506,12 @@ static int send_frame(int sock, struct sockaddr_in *dest, bd_frame *f, uint64_t 
         (struct sockaddr *)dest, sizeof *dest) == len;
 }
 int main(int argc, char **argv) {
+#if defined(PERF_LAB) && defined(__QNX__)
+    if (argc==2 && !strcmp(argv[1],"--alert-tone")) return boost_alert_tone();
+#endif
     const char *host = 0;
     unsigned port = 6801, udp_port = BD_UDP_PORT, cycles = 0, count = 0, i;
-    int demo = 0, sock, no_trans = 0, session = 0, scanned = 0, transport = DIAG_AUTO, most_lost = 0;
+    int demo = 0, sock, active = -1, no_trans = 0, session = 0, scanned = 0, transport = DIAG_AUTO, most_lost = 0;
     struct diag_link link;
     struct diag_link_cfg cfg;
     pid_t parent = getppid();
@@ -479,6 +537,7 @@ int main(int argc, char **argv) {
     uint64_t failed_until[sizeof dids/sizeof dids[0]] = {0};
 #ifdef PERF_LAB
     int ethanol=0, diesel=0;
+    uint64_t next_hud=0;
     unsigned selected=(1u << 8) - 1;
     uint64_t next_ethanol=0;
     uint64_t obd_due[sizeof obd_pids/sizeof obd_pids[0]] = {0};
@@ -507,6 +566,7 @@ int main(int argc, char **argv) {
     }
     if (host && demo) { fprintf(stderr, "Choose --host or --demo, never both.\n"); return 2; }
     if (!host && !demo && transport == DIAG_HSFZ) { fprintf(stderr, "--transport hsfz needs --host.\n"); return 2; }
+    if (native_android_auto_installed()) transport = DIAG_HSFZ;
     if (transport == DIAG_MOST) host = 0;
     memset(&cfg, 0, sizeof cfg);
     cfg.host = host; cfg.port = port; cfg.transport = transport; cfg.kind = DIAG_LOOP;
@@ -517,6 +577,10 @@ int main(int argc, char **argv) {
     if (session && (parent <= 1 || demo)) return 2;
     sock = socket(AF_INET, SOCK_DGRAM, 0);
     if (sock < 0) { perror("UDP socket"); return 1; }
+    if (!demo) {
+        active = gauge_bind(BOOST_ACTIVE_PORT);
+        if (active < 0) { close(sock); return 1; }
+    }
     memset(&dest,0,sizeof dest); dest.sin_family=AF_INET; dest.sin_port=htons((uint16_t)udp_port);
     inet_pton(AF_INET,"127.0.0.1",&dest.sin_addr); /* local process IPC only */
     memset(&f,0,sizeof f); f.demo=(unsigned)demo;
@@ -643,6 +707,25 @@ int main(int argc, char **argv) {
                 f.value[k]=v; observed[k]=bd_mono_ms(); f.valid |= 1u << k;
                 if (diag_link_on_most(&link) && !send_frame(sock,&dest,&f,observed)) { perror("send frame"); diag_running=0; }
             }
+            // Supply RPM over the existing HSFZ connection only while HUD needs it.
+            // Boost is shared from the dashboard's selected signals, with the same freshness rule.
+            if (active >= 0 && start >= next_hud) {
+                next_hud = bd_mono_ms() + 150;
+                if (link.fd >= 0 && diag_running && gauge_active(HUD_TELEMETRY_PORT)) {
+                    double rpm;
+                    int read = read_pid(&link, 0x0c, &rpm);
+                    struct hud_telemetry sample = { bd_mono_ms(), BOOST_ACTIVE_PORT, 0, 0, 0 };
+                    if (read == 1) {
+                        sample.rpm = (unsigned)rpm;
+                        sample.valid = HUD_SAMPLE_RPM;
+                    } else if (read == -1) diag_link_drop(&link);
+                    if ((f.valid & (1u << BD_BOOST)) && sample.sampled_ms - observed[BD_BOOST] < 1100) {
+                        sample.boost_tenths = (int)round(f.value[BD_BOOST] * 10);
+                        sample.valid |= HUD_SAMPLE_BOOST;
+                    }
+                    gauge_publish(active, &sample);
+                }
+            }
             /* Not over MOST: the tunnel's echo check and 2 s wait do not suit this read. */
             if (up && link.fd>=0 && ethanol && !diesel && start>=next_ethanol && diag_running) {
                 /* Published MHD+ MG1 monitor layout. This is the tune's active
@@ -682,6 +765,7 @@ int main(int argc, char **argv) {
     }
     diag_link_close(&link);
     close(sock);
+    if (active >= 0) close(active);
     return most_lost ? 1 : 0;
 }
 #endif

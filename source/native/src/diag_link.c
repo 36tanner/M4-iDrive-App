@@ -2,6 +2,7 @@
 #include "diag_link.h"
 #include "diagnostic_lease.h"
 #include "gauge_core.h"
+#include "gauge_coexistence.h"
 #include "most/dsi_client.h"
 #include "most/most_link.h"
 #include <arpa/inet.h>
@@ -157,7 +158,7 @@ int diag_hsfz_exchange(int fd, unsigned ecu, const unsigned char *uds, unsigned 
 
 /* A DSI send has no timeout, so once MOST is in use SIGALRM's default action bounds every loop and the
  * shutdown. */
-enum { LOOP_FAILS_TO_MOST = 5, MOST_OPEN_MS = 2000, MOST_RETRY_MS = 30000, MOST_WAIT_MIN_MS = 2000,
+enum { LOOP_FAILS_TO_MOST = 5, MOST_OPEN_MS = 2000, MOST_RETRY_MS = 30000, MOST_GAUGE_RETRY_MS = 250, MOST_WAIT_MIN_MS = 2000,
        LOOP_WATCHDOG_S = 60, STOP_WATCHDOG_S = 15, LOOP_LEASE_WAIT_MS = 300, ONESHOT_LEASE_WAIT_MS = 3000,
        LEASE_POLL_MS = 20, MOST_YIELD_MS = 100 };
 static volatile sig_atomic_t most_armed;
@@ -183,7 +184,7 @@ void diag_link_init(struct diag_link *l, const struct diag_link_cfg *cfg) {
     memset(l, 0, sizeof *l);
     l->cfg = *cfg;
     if (l->cfg.transport == DIAG_MOST) l->cfg.host = 0;
-    l->fd = l->lock = -1;
+    l->fd = l->lock = l->gauge_most_lock = -1;
     l->most_usable = 1;
 }
 
@@ -210,10 +211,31 @@ int diag_link_reserve_oneshot(struct diag_link *l) {
     return l->lock >= 0;
 }
 
-/* 1 when the tunnel is up. A failed open is closed here; when that close cannot stop the DSI thread, or the
+/* 1 when the tunnel is up, -1 while a gauge owns arbitration. A failed open is closed here; when that close cannot stop the DSI thread, or the
  * library is missing, MOST stays off for this process. */
 static int open_most(struct diag_link *l) {
     enum most_open_rc rc;
+    unsigned gauge_port = 0;
+    if (l->cfg.kind == DIAG_LOOP && l->cfg.dsi_name) {
+        if (!strcmp(l->cfg.dsi_name, "boostdeck")) gauge_port = BOOST_MOST_PORT;
+        else if (!strcmp(l->cfg.dsi_name, "shiftdeck")) gauge_port = SHIFT_MOST_PORT;
+        else if (!strcmp(l->cfg.dsi_name, "launchdeck")) gauge_port = LAUNCH_MOST_PORT;
+        else if (!strcmp(l->cfg.dsi_name, "warmdeck")) gauge_port = WARM_MOST_PORT;
+    }
+    if (gauge_port) {
+        l->gauge_most_lock = gauge_bind(gauge_port);
+        if (l->gauge_most_lock < 0) return -1;
+        // Mark this dashboard before checking HUD ownership. A new HUD worker
+        // will see the mark even after we release the arbitration port.
+        int arbitration = gauge_bind(GAUGE_MOST_PORT);
+        if (arbitration < 0) {
+            if (errno == EADDRINUSE) gauge_request_most();
+            close(l->gauge_most_lock);
+            l->gauge_most_lock = -1;
+            return -1;
+        }
+        close(arbitration);
+    }
     most_armed = 1;
     alarm(LOOP_WATCHDOG_S);
     if (l->cfg.dsi_name) dsi_client_set_name(l->cfg.dsi_name);
@@ -225,6 +247,10 @@ static int open_most(struct diag_link *l) {
     if (rc == MOST_NO_LIBRARY) l->most_usable = 0;
     alarm(STOP_WATCHDOG_S);
     if (most_close() != 0) l->most_usable = 0;
+    else if (l->gauge_most_lock >= 0) {
+        close(l->gauge_most_lock);
+        l->gauge_most_lock = -1;
+    }
     if (diag_running) alarm(0);
     return 0;
 }
@@ -251,8 +277,12 @@ int diag_link_up(struct diag_link *l) {
     if (l->most_usable && !l->hsfz_seen && l->cfg.transport != DIAG_HSFZ && diag_running &&
         now >= l->most_retry_at &&
         (!l->cfg.host || l->hsfz_fails >= (oneshot ? 1u : (unsigned)LOOP_FAILS_TO_MOST))) {
-        l->on_most = open_most(l);
-        if (l->on_most) return 1;
+        int opened = open_most(l);
+        if (opened == 1) { l->on_most = 1; return 1; }
+        if (opened < 0) {
+            l->most_retry_at = bd_mono_ms()+MOST_GAUGE_RETRY_MS;
+            return 0;
+        }
         if (oneshot) l->most_usable = 0;
         l->most_retry_at = bd_mono_ms()+MOST_RETRY_MS;
         l->hsfz_fails = 0;
@@ -329,7 +359,11 @@ void diag_link_close(struct diag_link *l) {
     release_gateway(&l->fd, &l->lock);
     if (most_armed) {
         alarm(STOP_WATCHDOG_S);
-        if (most_close() == 0 && diag_running) alarm(0);
+        if (most_close() == 0) {
+            if (l->gauge_most_lock >= 0) close(l->gauge_most_lock);
+            l->gauge_most_lock = -1;
+            if (diag_running) alarm(0);
+        }
     }
     l->on_most = 0;
 }

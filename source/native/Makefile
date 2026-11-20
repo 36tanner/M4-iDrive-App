@@ -3,7 +3,7 @@ PYTHON ?= python3
 CFLAGS ?= -O2 -std=c99 -Wall -Wextra -Werror
 CORE = src/gauge_core.c
 CORE_LINK = $(CORE) src/diag_link.c
-HEADERS = src/gauge_core.h src/boost_signals.def src/drive_frame.h src/diagnostic_lease.h src/diag_link.h
+HEADERS = src/gauge_core.h src/boost_signals.def src/drive_frame.h src/diagnostic_lease.h src/diag_link.h src/gauge_coexistence.h
 # Every host worker carries the HSFZ-then-MOST link, with a fake DSI selected by ID6_FAKE_MOST.
 MOST = src/most/most_link.c src/most/dsi_client.c src/most/most_proto.c src/most/dsi_bind.c
 MOST_HEADERS = src/most/most_link.h src/most/dsi_client.h src/most/most_proto.h src/most/dsi_abi.h
@@ -15,6 +15,7 @@ HOST_LINK = $(CC) $(CFLAGS) -pthread -DMOST_HOST -Isrc -Itests
 assets:
 	$(PYTHON) tools/make_bars.py
 	$(PYTHON) tools/make_drive_apps.py
+	$(PYTHON) tools/make_warmdeck.py
 
 build:
 	mkdir -p build
@@ -58,10 +59,24 @@ build/launch_timer.o: src/launch_timer.c src/launch_timer.h | build
 build/test-launch-records: tests/test_launch_records.cpp build/launch_timer.o src/launch_records.h | build
 	$(CXX) -O2 -std=gnu++98 -Wall -Wextra -Werror -Isrc $(filter %.cpp %.o,$^) -o $@
 
+build/warmdeck-collector: src/warm_worker.c $(CORE_LINK) $(MOST) tests/fake_most_env.c $(FAKE_DSI) $(HEADERS) $(MOST_HEADERS) src/warm_frame.h | build
+	$(HOST_LINK) -DPERF_LAB $(filter %.c,$^) -lm -o $@
+
+build/test-warm-progress: tests/test_warm_progress.cpp src/warm_progress.h src/warm_frame.h | build
+	$(CXX) -O2 -std=gnu++98 -Wall -Wextra -Werror -Isrc $< -o $@
+
+build/boost-test-core.o: $(CORE) $(HEADERS) | build
+	$(CC) $(CFLAGS) -DPERF_LAB -Isrc -c $< -o $@
+
+build/test-boost-preferences: tests/test_boost_preferences.cpp build/boost-test-core.o src/boost_preferences.h src/gauge_preferences.h | build
+	$(CXX) -O2 -std=gnu++98 -Wall -Wextra -Werror -DPERF_LAB -Isrc $(filter %.cpp %.o,$^) -o $@
+
 launch-assets:
 	$(PYTHON) tools/launch_art.py
 
-test: build/xdrive-control build/boostdeck-collector build/shift-deck build/mhd-maps build/engine-codes build/test-core build/test-most build/test-diag-link build/bootmod3 build/exhaust-flap build/test-launch-timer build/test-launch-records
+test: build/xdrive-control build/boostdeck-collector build/shift-deck build/mhd-maps build/engine-codes build/test-core build/test-most build/test-diag-link build/bootmod3 build/exhaust-flap build/test-launch-timer build/test-launch-records build/test-boost-preferences build/test-warm-progress build/warmdeck-collector
+	./build/test-warm-progress
+	./build/test-boost-preferences
 	./build/test-launch-timer
 	./build/test-launch-records
 	./build/test-core

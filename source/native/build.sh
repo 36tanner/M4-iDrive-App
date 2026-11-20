@@ -27,7 +27,7 @@ cxx -DPERF_LAB -Isrc -Isdk -O2 -fno-strict-aliasing -fno-exceptions -fPIC -share
 # Every worker carries the HSFZ-then-MOST link. dlopen and pthreads are in QNX libc; the DSI library is
 # opened only at run time, so nothing private is linked.
 worker() { c -Isrc -O2 "$@" src/diag_link.c src/most/*.c -Lout -lm -lsocket; }
-worker -DNATIVE_FAST -DPERF_LAB src/collector.c out/core.o -o out/boostdeck-collector-qnx
+worker -DNATIVE_FAST -DPERF_LAB src/collector.c src/boost_tone.c out/core.o -o out/boostdeck-collector-qnx
 cxx -DPERF_LAB -Isrc -Isdk -O2 -fno-exceptions -fPIC -shared src/mhd_maps.cpp \
     "$frameworks/libAppFramework.A.so" "$frameworks/libCoreFramework.A.so" -Lout \
     -Wl,--allow-shlib-undefined -Wl,-soname,libMhdMaps.so -o out/libMhdMaps.so
@@ -66,6 +66,11 @@ c -Isrc -O2 -fPIC -c src/launch_timer.c -o out/launch_timer.o
 cxx -DPERF_LAB -Isrc -Isdk -O2 -fno-exceptions -fPIC -shared src/launch_deck.cpp out/core.o out/launch_timer.o \
     "$frameworks/libAppFramework.A.so" "$frameworks/libCoreFramework.A.so" -Lout -lm -lsocket \
     -Wl,--allow-shlib-undefined -Wl,-soname,libLaunchDeck.so -o out/libLaunchDeck.so
+
+cxx -DPERF_LAB -Isrc -Isdk -O2 -fno-exceptions -fPIC -shared src/warm_deck.cpp out/core.o \
+    "$frameworks/libAppFramework.A.so" "$frameworks/libCoreFramework.A.so" -Lout -lm -lsocket \
+    -Wl,--allow-shlib-undefined -Wl,-soname,libWarmDeck.so -o out/libWarmDeck.so
+worker -DPERF_LAB src/warm_worker.c out/core.o -o out/warmdeck-collector-qnx
 
 # Optional HUD build against the licensed NBT-AAD milestone-7 source.
 if test -n "${NBTAAD_SOURCE:-}"; then

@@ -30,6 +30,9 @@ int bd_decode_obd(unsigned pid, const unsigned char *data, size_t len, double *o
 int bd_encode(const bd_frame *f, char *out, size_t len);
 int bd_parse(const char *data, size_t len, bd_frame *out);
 int bd_is_fresh(const bd_frame *f, unsigned i, uint64_t elapsed_ms);
+int bd_is_pressure(unsigned i);
+double bd_display_selected(unsigned i, double value, unsigned selection);
+const char *bd_unit_selected(unsigned i, unsigned selection);
 double bd_display_value(unsigned i, double value, int metric);
 int bd_bar(unsigned i, double value); /* normalized 0..1000, independent of units */
 const char *bd_unit(unsigned i, int metric);

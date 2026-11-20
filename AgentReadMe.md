@@ -43,7 +43,7 @@ Install [LaunchDeck](packages/launchdeck.zip) as a separate plugin folder with c
 
 ## Uninstall
 
-Each app is one folder under /var/opt/hmi/data/ID5/Plugins. Keep each folder intact so its local settings, including gateway-ip.txt and hud-enabled where present, can be restored.
+Each app is one folder under /var/opt/hmi/data/ID5/Plugins. Keep each folder intact so its local settings, including gateway-ip.txt, can be restored.
 
 | App | Folder |
 | --- | --- |

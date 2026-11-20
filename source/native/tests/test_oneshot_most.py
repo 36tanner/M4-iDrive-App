@@ -176,7 +176,7 @@ class EngineCodesTest(unittest.TestCase):
 
     def test_engine_codes_most_clear(self):
         r = run("engine-codes", ["--transport", "most", "--clear"], "up")
-        self.assertEqual(r.stdout, "Engine: 2 codes after clear\n123456  status 2F\n0ABCDE  status 08\n")
+        self.assertEqual(r.stdout, "Clear accepted; 2 engine codes remain\n123456  status 2F\n0ABCDE  status 08\n")
 
     def test_engine_codes_full_reply(self):
         r = run("engine-codes", ["--transport", "most", "--codes"], "codes-512")

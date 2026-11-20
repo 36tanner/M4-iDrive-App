@@ -4,6 +4,7 @@
 #include "hud_sample.h"
 #include "gauge_core.h"
 #include "diagnostic_gateway.h"
+#include "gauge_coexistence.h"
 extern "C" {
 #include "diag_link.h"
 }
@@ -37,7 +38,7 @@ static void registry(const std::vector<most::RegistryEntry>& entries, void* user
 }
 
 static bool sendToExpectedNode(const most::Msg& message, void* user) {
-    if (message.dst != expectedNode) return false;
+    if (message.dst != expectedNode || projection_hud_installed()) return false;
     if (message.fkt == hud::kTextareaSetText && message.data.size() >= 2)
         printf("HUD send text %u: %s\n", hud::rdBe16(&message.data[0]),
                hud::decodeText(&message.data[0], message.data.size()).c_str());
@@ -120,7 +121,6 @@ static bool draw(hud::HudTerminal& terminal, const hud_sample& sample, unsigned&
         batch.add(hud::kSetVisibility, hud::setVisibility(boostLabel, false));
         batch.add(hud::kSetVisibility, hud::setVisibility(boostValue, true));
         batch.add(hud::kSetVisibility, hud::setVisibility(unitsText, true));
-        batch.add(hud::kTextareaSetText, hud::setText(unitsText, "PSI"));
     }
     if (tachChanged) {
         batch.add(hud::kRemoveAllItems, hud::removeAllItems(buffer));
@@ -160,7 +160,37 @@ static bool clear(hud::HudTerminal& terminal, unsigned visible) {
     return submit(terminal, batch);
 }
 
+static bool dashboard_sample(int socket, unsigned source, hud_sample& sample) {
+    bool updated = false;
+    for (unsigned i = 0; i < 64; ++i) {
+        struct hud_telemetry value;
+        struct sockaddr_in peer;
+        socklen_t size = sizeof peer;
+        ssize_t count = recvfrom(socket, &value, sizeof value, 0,
+                                 reinterpret_cast<sockaddr*>(&peer), &size);
+        if (count < 0) break;
+        const uint64_t now = bd_mono_ms();
+        if (count != sizeof value || peer.sin_addr.s_addr != htonl(0x7f000001u) ||
+            ntohs(peer.sin_port) != source || value.source != source ||
+            value.sampled_ms > now || now - value.sampled_ms >= 1100 ||
+            (updated && value.sampled_ms < sample.rpm_ms)) continue;
+        sample.rpm = value.rpm;
+        sample.rpm_ms = value.valid & HUD_SAMPLE_RPM ? value.sampled_ms : 0;
+        sample.have_boost = (value.valid & HUD_SAMPLE_BOOST) != 0;
+        sample.boost_tenths = value.boost_tenths;
+        updated = true;
+    }
+    return updated;
+}
+
 static int trial(const char* host, bool requirePark) {
+    if (projection_hud_installed()) return 7;
+    // Hold the port through process exit, when the MOST client is destroyed by QNX.
+    const int mostAccess = gauge_bind(GAUGE_MOST_PORT);
+    if (mostAccess < 0 || gauge_active(BOOST_MOST_PORT) ||
+        gauge_active(SHIFT_MOST_PORT) || gauge_active(LAUNCH_MOST_PORT) || gauge_active(WARM_MOST_PORT)) return 8;
+    const int telemetry = gauge_bind(HUD_TELEMETRY_PORT);
+    if (telemetry < 0) return 1;
     hud::Config config;
     config.handles.allow(frame);
     config.handles.allow(shape);
@@ -192,15 +222,22 @@ static int trial(const char* host, bool requirePark) {
         return 2;
     }
 
-    bool shown = false;
+    bool shown = false, verified = false;
+    unsigned source = 0;
     unsigned visible = stock;
     hud_reader reader;
     hud_reader_init(&reader);
     hud_sample latest = {}, submitted = {};
-    uint64_t nextPoll = 0, lastTelemetry = bd_mono_ms();
+    uint64_t nextPoll = 0, nextConflictCheck = 0, lastTelemetry = bd_mono_ms();
     const pid_t parent = getppid();
     int result = 0;
     while (!stop && getppid() == parent) {
+        if (bd_mono_ms() >= nextConflictCheck) {
+            if (projection_hud_installed()) { result = 7; break; }
+            nextConflictCheck = bd_mono_ms() + 500;
+        }
+        char request;
+        if (recv(mostAccess, &request, 1, 0) > 0) { result = 8; break; }
         const hud::Status state = terminal.status();
         if (state == hud::kFailed) {
             result = 4;
@@ -209,7 +246,7 @@ static int trial(const char* host, bool requirePark) {
         if (state != hud::kReady) {
             hud_reader_close(&reader);
             latest.rpm_ms = 0;
-            shown = false;
+            shown = verified = false;
             visible = stock;
             lastTelemetry = bd_mono_ms(); // pause the data timeout while factory guidance owns the HUD
             usleep(150000);
@@ -218,10 +255,27 @@ static int trial(const char* host, bool requirePark) {
 
         uint64_t now = bd_mono_ms();
         if (now >= nextPoll) {
-            hud_sample sample;
-            const int read = hud_reader_poll(&reader, host, &sample, requirePark);
-            if (read > 0) { latest = sample; lastTelemetry = sample.rpm_ms; }
-            else if (read < 0) latest.rpm_ms = 0; // Park test failed its speed or gear check.
+            const unsigned active = gauge_active(SHIFT_ACTIVE_PORT) ? SHIFT_ACTIVE_PORT :
+                gauge_active(BOOST_ACTIVE_PORT) ? BOOST_ACTIVE_PORT :
+                gauge_active(LAUNCH_ACTIVE_PORT) ? LAUNCH_ACTIVE_PORT :
+                gauge_active(WARM_ACTIVE_PORT) ? WARM_ACTIVE_PORT : 0;
+            if (active != source) {
+                hud_reader_close(&reader);
+                latest.rpm_ms = 0;
+                source = active;
+            }
+            hud_sample sample = {};
+            if (source) {
+                // Dashboard workers own diagnostics until they exit. LaunchDeck has no RPM stream.
+                if (!requirePark && (source == BOOST_ACTIVE_PORT || source == SHIFT_ACTIVE_PORT) &&
+                    dashboard_sample(telemetry, source, sample)) latest = sample;
+                lastTelemetry = now;
+            } else {
+                (void)dashboard_sample(telemetry, 0, sample); // Drain former producers.
+                const int read = hud_reader_poll(&reader, host, &sample, requirePark);
+                if (read > 0) { latest = sample; lastTelemetry = sample.rpm_ms; }
+                else if (read < 0) latest.rpm_ms = 0;
+            }
             now = bd_mono_ms();
             nextPoll = now + 30;
         }
@@ -234,9 +288,19 @@ static int trial(const char* host, bool requirePark) {
                         result = 5;
                         break;
                     }
-                    shown = false;
+                    shown = verified = false;
                     visible = stock;
                 }
+            } else if (!verified) {
+                // Check the reference text handle before altering visibility or graphics.
+                hud::Batch probe("check HUD layout");
+                probe.add(hud::kTextareaSetText, hud::setText(unitsText, "PSI"));
+                if (!submit(terminal, probe)) {
+                    if (terminal.status() == hud::kFailed || terminal.status() == hud::kReady) {
+                        result = 4;
+                        break;
+                    }
+                } else verified = true;
             } else {
                 const bool tachChanged = !shown || tachX(latest.rpm) != tachX(submitted.rpm);
                 const bool boostChanged = !shown || latest.have_boost != submitted.have_boost ||
@@ -255,9 +319,11 @@ static int trial(const char* host, bool requirePark) {
         usleep(5000);
         if (now - lastTelemetry > 12000) break;
     }
+    if (projection_hud_installed()) result = 7;
     if (!stop && !result && getppid() == parent) result = 6;
     hud_reader_close(&reader);
-    if (result && result != 6) return result;
+    close(telemetry);
+    if (result && result != 6 && result != 8) return result;
     if (shown && terminal.status() == hud::kReady &&
         (!terminal.waitIdle(3500) || !clear(terminal, visible))) return 5;
     return result;

@@ -3,31 +3,10 @@
 #include "diagnostic_worker.h"
 #include "diagnostic_gateway.h"
 #include <sys/wait.h>
-#include <stdlib.h>
 
 namespace {
 const unsigned kPoll = 0x48554454u;
 const char kWorker[] = "/var/opt/hmi/data/ID5/Plugins/HudTest/hud-shape-qnx";
-const char kPreference[] = "/var/opt/hmi/data/ID5/Plugins/HudTest/hud-enabled";
-
-bool restoreEnabled() {
-    FILE* file = fopen(kPreference, "r");
-    if (!file) return false;
-    const bool enabled = fgetc(file) == '1' && fgetc(file) == '\n' && fgetc(file) == EOF;
-    fclose(file);
-    return enabled;
-}
-
-bool saveEnabled(bool enabled) {
-    char temporary[] = "/var/opt/hmi/data/ID5/Plugins/HudTest/hud-enabled.XXXXXX";
-    int fd = mkstemp(temporary);
-    if (fd < 0) return false;
-    const bool written = write(fd, enabled ? "1\n" : "0\n", 2) == 2 && fsync(fd) == 0;
-    const bool closed = close(fd) == 0;
-    if (written && closed && rename(temporary, kPreference) == 0) return true;
-    unlink(temporary);
-    return false;
-}
 }
 
 class HudTest : public bmw::PluginApp {
@@ -65,11 +44,6 @@ class HudTest : public bmw::PluginApp {
 
     bool show(const bmw::Parcel&) {
         const bool next = !enabled_;
-        if (!saveEnabled(next)) {
-            updateModel(51u, enabled_);
-            status("Could not save the HUD setting.");
-            return true;
-        }
         enabled_ = next;
         updateModel(51u, enabled_);
         retries_ = enabled_ ? 3 : 0;
@@ -95,13 +69,8 @@ public:
         action.m_obj = this;
         action.m_exec = &Action::execImpl<HudTest, &HudTest::show>;
         addHandler(21u, action);
-        enabled_ = restoreEnabled();
-        updateModel(51u, enabled_);
-        if (enabled_) {
-            retries_ = 3;
-            status("Starting saved HUD gauges.");
-            poll(1800);
-        } else status("Check to show HUD gauges and remember it at startup.");
+        updateModel(51u, false);
+        status("Check to show HUD gauges for this iDrive session.");
         return true;
     }
     virtual bool invokeDataUpdate(unsigned key, const bmw::Parcel& data) {
@@ -122,8 +91,14 @@ public:
         if (!enabled_) status("HUD gauges off.");
         else if (code == 0 || code == 1 || code == 2)
             retry("Waiting for the supported factory MOST HUD.");
-        else if (code == 4) status("HUD rejected the overlay. This cluster layout may be unsupported.");
-        else if (code == 6) retry("No HUD speed/RPM diagnostics. Check the gateway and ignition.");
+        else if (code == 4 || code == 7 || code == 8) {
+            enabled_ = false;
+            updateModel(51u, false);
+            if (code == 4) status("HUD rejected the overlay. This cluster layout may be unsupported.");
+            else if (code == 7) status("HUD gauges unavailable with the installed Android Auto or CarPlay HUD add-on.");
+            else status("A dashboard needs MOST diagnostics. Enable HUD gauges again after closing it.");
+        }
+        else if (code == 6) retry("No HUD RPM diagnostics. Check the gateway and ignition.");
         else status("HUD gauges stopped. Check ENET and navigation.");
         return true;
     }

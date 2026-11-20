@@ -16,6 +16,8 @@ Download the [installer release](https://github.com/inotbarnacle/ID6_apps_prerel
 4. Choose **Check compatibility**. Verify the SSH fingerprint for your head unit when prompted. If automatic detection cannot read the firmware or display size, enter the full NBTevo code or select the known resolution under **Connection settings**. A successful check reports the exact matched firmware, display size, and diagnostic gateway. See the [compatibility matrix](source/docs/COMPATIBILITY.md) for the evidence behind each profile.
 5. Choose **Install selected menus**. Wait for verification and record the backup path. Restart iDrive while parked, then open the menus under **My Vehicle**.
 
+The installer uses the same RHMI layout at 1280 × 480, 1440 × 540 and 1920 × 720. iDrive scales the shared 1440 × 540 logical canvas to the panel. The 800 × 480 and 960 × 480 panels have less logical content width, so the installer stages compact artwork for those panels. HUD menu sizing is separate from the windshield overlay. [Andreas Boehm’s layout measurements](https://github.com/AndreasBoehm/idrive6-layout-preview) · [Issue #113](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/113)
+
 ## Uninstall
 
 1. Before removing an app, set the vehicle controls to the state you want to keep. For example, turn off the HUD overlay while HUD Gauges is still installed. Re-enable temporary SSH if iDrive has since rebooted.

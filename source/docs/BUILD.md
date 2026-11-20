@@ -30,6 +30,14 @@ sh native/build.sh
 
 The script builds the native libraries and diagnostic workers. The dashboard diagnostic workers use the [MOST fallback](MOST.md), which loads the DSI library at runtime. The MHD+ Suite package also includes a dedicated Exhaust Flap worker as `MhdMaps/exhaust-flap-worker-qnx`. It uses the PR #29 commands and the shared HSFZ-to-MOST fallback. Use `native/tools/merge_exhaust_flap_page.py` to assemble the submenu from the original flap artwork and the MHD+ Suite image archive. The packaged XML and matching image archives must be deployed together.
 
+Regenerate BoostDeck's settings XML and circular dial artwork together. Extract
+`BoostDeck/BoostDeck_ALL_Images.zip` from the previous dashboard package and pass
+it as `--images` to `native/tools/make_boostdeck_extended.py`, with a separate
+`--images-out` path. Stage the generated XML and image ZIP together. The
+alert chime is a separate invocation of the BoostDeck worker and uses the
+head unit's preferred QNX PCM playback route.
+[QNX PCM playback documentation](https://www.qnx.com/developers/docs/6.5.0SP1/neutrino/audio/pcm.html)
+
 ## New firmware
 
 Use the [car identification steps](../../AgentReadMe.md#identify-the-car), the [porting workflow](PORTING.md), and the [read-only capture tool](../tools/capture_headunit.py) to collect the platform, display, and framework evidence before building a candidate profile.
@@ -61,4 +69,4 @@ Inspect the report's limitations. The tool checks required imports, function ins
 
 ## Build HUD Gauges
 
-Set `NBTAAD_SOURCE` to the absolute path of `milestone-7/src` from the licensed [NBT-AAD reference source](https://github.com/Sq00ky/Supra-iDrive6-Android-Auto/tree/f97f1a34bdf68f1861862bd6361a2918949a48f2/milestone-7). Run `sh native/build.sh` to produce the optional HUD library and worker. HUD retains the original 6WA handle map and factory-navigation ownership checks. The rebuilt worker accepts a configured gateway IPv4 address. A cluster that rejects the reference handles still requires a parked HUD protocol capture for porting.
+Set `NBTAAD_SOURCE` to the absolute path of `milestone-7/src` from the licensed [NBT-AAD reference source](https://github.com/Sq00ky/Supra-iDrive6-Android-Auto/tree/47ff0ae89712f2b5cbfe743cc8b7ff413ed235cc/milestone-7). Run `sh native/build.sh` to produce the optional HUD library and worker. HUD retains the original 6WA handle map and factory-navigation ownership checks. The rebuilt worker accepts a configured gateway IPv4 address. A cluster that rejects the reference handles still requires a parked HUD protocol capture for porting.
