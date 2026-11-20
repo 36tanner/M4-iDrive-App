@@ -165,7 +165,7 @@ class DriveAppsTest(unittest.TestCase):
             lock.bind(("127.0.0.1", 42861))
             with subprocess.Popen(
                 [BUILD/"shift-deck", "--host", "127.0.0.1",
-                 "--port", str(gateway.getsockname()[1]), "--cycles", "6"],
+                 "--port", str(gateway.getsockname()[1]), "--cycles", "60"],
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
             ) as worker:
                 try:
@@ -200,7 +200,7 @@ class DriveAppsTest(unittest.TestCase):
             udp.settimeout(5)
             r = subprocess.run(
                 [BUILD/"shift-deck", "--host", "127.0.0.1", "--port", str(self.closed_port()),
-                 "--udp-port", str(udp.getsockname()[1]), "--cycles", "40"],
+                 "--udp-port", str(udp.getsockname()[1]), "--cycles", "120"],
                 capture_output=True, text=True, timeout=20, env=self.most_env())
             _, rpm, kph = struct.unpack("=Qii", udp.recv(64))
         self.assertEqual(r.returncode, 0, r.stderr)
@@ -261,7 +261,7 @@ class DriveAppsTest(unittest.TestCase):
             try:
                 self.shift_frames(us, 1)
                 alone = self.shift_frames(us, 5)
-                procs.append(self.start_most("boostdeck-collector", ub.getsockname()[1], ["--session"], env=env))
+                procs.append(self.start_most("boost-deck", ub.getsockname()[1], ["--session"], env=env))
                 self.shift_frames(us, 1)
                 shared = self.shift_frames(us, 5)
                 self.assertIsNone(procs[1].poll())
@@ -307,7 +307,7 @@ class DriveAppsTest(unittest.TestCase):
                 u.bind(("127.0.0.1", 0))
                 u.settimeout(0.5)
             shift = self.start_most("shift-deck", us.getsockname()[1])
-            boost = self.start_most("boostdeck-collector", ub.getsockname()[1], ["--session"])
+            boost = self.start_most("boost-deck", ub.getsockname()[1], ["--session"])
             prober = threading.Thread(target=probe)
             prober.start()
             shift_ok = boost_ok = 0

@@ -1,7 +1,7 @@
 """Generate the LaunchDeck acceleration timers RHMI resources.
 
-Writes plugin/LaunchDeck.manifest, plugin/LaunchDeck.xml, plugin/LaunchDeck_ALL_Images.zip,
-src/launch_assets.h and a preview PNG. Layout targets the 1280 x 480 panel content area
+Writes native/manifests/LaunchDeck.manifest, manifests/LaunchDeck.xml, manifests/LaunchDeck_ALL_Images.zip,
+src/plugins/launch_assets.h and a preview PNG. Layout targets the 1280 x 480 panel content area
 used by ShiftDeck (x 52..1156, y 10..430).
 """
 from io import BytesIO
@@ -12,8 +12,8 @@ import sys
 
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
-NATIVE = Path(__file__).resolve().parents[1]
-PLUGIN = NATIVE / "plugin"
+NATIVE = Path(__file__).resolve().parents[1] / "native"
+PLUGIN = NATIVE / "manifests"
 NAME, TITLE, CONNECTOR, WEIGHT = "LaunchDeck", "LaunchDeck", 120, 219
 
 # Panel geometry (content area).
@@ -250,7 +250,7 @@ def header():
              "                   kModelSpeed = 70u, kModelLast = 75u, kModelPrevious = 80u, kModelThird = 85u };",
              f"static const unsigned kLaunchSpeedChars = {CARD_CHARS[0]}u;",
              f"static const unsigned kLaunchTimeChars = {CARD_CHARS[1]}u;", ""]
-    (NATIVE / "src" / "launch_assets.h").write_text("\n".join(lines))
+    (NATIVE / "src" / "plugins" / "launch_assets.h").write_text("\n".join(lines))
 
 
 def archive(images):
