@@ -52,21 +52,13 @@ Choose **MHD+ Suite**, **Bootmod3 Suite**, or **MG Flasher**. [Download the dash
 
 ## iDrive menus
 
-### New app previews
-
-These previews use the app layouts and sample readings.
-
-<table>
-  <tr>
-    <td><img src="images/MG-Flasher-menu-preview.png" alt="MG Flasher map slot selection" width="300"><br>MG Flasher</td>
-    <td><img src="images/HybridDeck-preview.png" alt="HybridDeck showing high-voltage battery health and live readings" width="300"><br>HybridDeck</td>
-    <td><img src="images/BoostDeck-large-dials-preview.png" alt="BoostDeck with the larger circular gauges" width="300"><br>BoostDeck circular gauges</td>
-  </tr>
-</table>
-
 ### General menus
 
 <table>
+  <tr>
+    <td><img src="images/boostdeck-circular-gauges.png" alt="BoostDeck with larger circular gauges" width="300"><br>BoostDeck circular gauges</td>
+    <td><img src="images/hybriddeck.png" alt="HybridDeck showing high-voltage battery health and other readings" width="300"><br>HybridDeck</td>
+  </tr>
   <tr>
     <td><img src="images/01-boostdeck.png" alt="BoostDeck on iDrive" width="300"><br>BoostDeck</td>
     <td><img src="images/02-shiftdeck.png" alt="ShiftDeck on iDrive" width="300"><br>ShiftDeck</td>
@@ -94,6 +86,14 @@ These previews use the app layouts and sample readings.
   </tr>
   <tr>
     <td><img src="images/05-max-cooling.png" alt="Max Cooling on iDrive" width="300"><br>Max Cooling</td>
+  </tr>
+</table>
+
+### MG Flasher
+
+<table>
+  <tr>
+    <td><img src="images/mg-flasher-map-switcher.png" alt="MG Flasher map slot selection" width="300"><br>Map Switcher</td>
   </tr>
 </table>
 
