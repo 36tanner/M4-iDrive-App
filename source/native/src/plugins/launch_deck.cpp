@@ -15,7 +15,6 @@
 
 namespace {
 const unsigned kLaunchPoll = 0x4C4E4348u;
-const unsigned kLaunchUdpPort = 42871u;
 const char kLaunchWorker[] = "/var/opt/hmi/data/ID5/Plugins/LaunchDeck/shift-deck-qnx";
 const char kLaunchGateway[] = "/var/opt/hmi/data/ID5/Plugins/LaunchDeck/gateway-ip.txt";
 const char* const kLaunchRecords[LT_MODE_COUNT]={
@@ -207,7 +206,7 @@ public:
             struct sockaddr_in address;
             memset(&address, 0, sizeof address);
             address.sin_family = AF_INET;
-            address.sin_port = htons(kLaunchUdpPort);
+            address.sin_port = htons(LAUNCH_DRIVE_PORT);
             address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
             if (fcntl(socket_, F_SETFL, O_NONBLOCK) < 0 || fcntl(socket_, F_SETFD, FD_CLOEXEC) < 0 ||
                 bind(socket_, reinterpret_cast<struct sockaddr*>(&address), sizeof address) < 0) {
@@ -242,7 +241,7 @@ public:
         if (visible_ && child_ <= 0 && now >= retry_at_) {
             const DiagnosticGateway gateway(kLaunchGateway);
             char port[8];
-            snprintf(port, sizeof port, "%u", kLaunchUdpPort);
+            snprintf(port, sizeof port, "%u", LAUNCH_DRIVE_PORT);
             const char* args[] = {kLaunchWorker, "--host", gateway.host(), "--udp-port", port, "--speed-only", 0};
             child_ = launch(args, -1);
             retry_at_ = now + 1000;

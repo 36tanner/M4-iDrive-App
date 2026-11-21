@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 
-enum { DRIVE_PORT = 42863, DRIVE_STALE_MS = 750 };
+enum { DRIVE_PORT = 42863, LAUNCH_DRIVE_PORT = 42864, DRIVE_STALE_MS = 750 };
 
 struct drive_frame {
     uint64_t sampled_ms;
