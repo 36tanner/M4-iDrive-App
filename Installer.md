@@ -1,6 +1,6 @@
 # ID6Apps Desktop Installer (beta)
 
-Download the [installer release](https://github.com/inotbarnacle/ID6_apps_prerelease/releases/tag/installer-v0.7.5). The macOS app supports Apple silicon and Intel Macs. On Windows, open the x64 folder for Intel or AMD PCs, or the ARM64 folder for Windows on ARM.
+Download the [installer release](https://github.com/inotbarnacle/ID6_apps_prerelease/releases/tag/installer-v0.7.6). The macOS app supports Apple silicon and Intel Macs. On Windows, open the x64 folder for Intel or AMD PCs, or the ARM64 folder for Windows on ARM.
 
 ## Enable temporary SSH first
 
@@ -12,8 +12,8 @@ Download the [installer release](https://github.com/inotbarnacle/ID6_apps_prerel
 
 1. Unzip the download and open **ID6Apps Installer**. It opens a page in your browser on the local computer.
 2. Choose the adapter. Leave the head unit IP blank for automatic discovery. Enter the IP in **Connection settings** if you know it or discovery fails. The installer uses the default SSH password.
-3. Select the menus you want. Choose MHD+ Suite, Bootmod3 Suite, or no tuning suite. LaunchDeck and HUD Gauges are optional. HUD Gauges and xDrive Control are experimental and depend on the hardware in the car. Road Jet and BEAMer require a 1280 × 480 display.
-4. Choose **Check compatibility**. Verify the SSH fingerprint for your head unit when prompted. If automatic detection cannot read the firmware or display size, enter the full NBTevo code or select the known resolution under **Connection settings**. A successful check reports the exact matched firmware, display size, and diagnostic gateway. See the [compatibility matrix](source/docs/COMPATIBILITY.md) for the evidence behind each profile.
+3. Select the menus you want. Choose MHD+ Suite, Bootmod3 Suite, MG Flasher, or no tuning suite. LaunchDeck and HUD Gauges are optional. HUD Gauges and xDrive Control are experimental and depend on the hardware in the car. Road Jet and BEAMer require a 1280 × 480 display.
+4. Choose **Check compatibility**. Verify the SSH fingerprint for your head unit when prompted. If automatic detection cannot read the firmware or display size, enter the full NBTevo code or select the known resolution under **Connection settings**. A successful check reports the detected firmware, display size, and diagnostic gateway. Firmware variants qualify when both live framework files match the hashes of the same approved pair. See the [compatibility matrix](source/docs/COMPATIBILITY.md) for the evidence behind each profile.
 5. Choose **Install selected menus**. Wait for verification and record the backup path. Restart iDrive while parked, then open the menus under **My Vehicle**.
 
 The installer uses the same RHMI layout at 1280 × 480, 1440 × 540 and 1920 × 720. iDrive scales the shared 1440 × 540 logical canvas to the panel. The 800 × 480 and 960 × 480 panels have less logical content width, so the installer stages compact artwork for those panels. HUD menu sizing is separate from the windshield overlay. [Andreas Boehm’s layout measurements](https://github.com/AndreasBoehm/idrive6-layout-preview) · [Issue #113](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/113)

@@ -76,7 +76,7 @@ static const struct {
     {0x0b, BD_MAP, 0}, {0x10, BD_MAF, 0}, {0x11, BD_THROTTLE, 0},
     {0x46, BD_AMBIENT, 0}, {0x5e, BD_FUEL_RATE, 0},
     {0x2f, BD_FUEL_LEVEL, 0}, {0x49, BD_ACCELERATOR, 0},
-    {0x05, BD_COOLANT, 1}, {0x0f, BD_IAT, 1}, {0x23, BD_RAIL, 1},
+    {0x05, BD_COOLANT, 0}, {0x0f, BD_IAT, 1}, {0x23, BD_RAIL, 0},
     {0x0b, BD_BOOST, 1},
     {0x0e, BD_SPARK_ADVANCE, 0}, {0x43, BD_ABS_LOAD, 0},
     {0x06, BD_STFT_B1, 0}, {0x07, BD_LTFT_B1, 0},
@@ -105,6 +105,22 @@ static int read_pid(struct diag_link *link, unsigned char pid, double *value) {
         else fprintf(stderr," unavailable reason=invalid-or-out-of-range\n");
     }
     return decoded;
+}
+
+/* PID 40 advertises support for 41 through 60. Some DMEs stay silent on
+ * an unsupported fuel-rate request, which also interrupts other HSFZ reads. */
+static int read_fuel_rate(struct diag_link *link, int *check_support, int *supported, double *value) {
+    if (*check_support) {
+        const unsigned char query[]={0x01,0x40}, prefix[]={0x41,0x40};
+        unsigned char reply[16];
+        unsigned negative;
+        int n=diag_link_request(link,0x12,query,sizeof query,prefix,sizeof prefix,
+                                reply,sizeof reply,500,&negative);
+        *check_support=0;
+        if (n==6) *supported=(reply[5] & 0x04)!=0;
+        if (n==-1) return -1;
+    }
+    return *supported ? read_pid(link,0x5e,value) : 0;
 }
 
 static int send_frame(int sock, struct sockaddr_in *dest, bd_frame *f, uint64_t *observed) {
@@ -137,8 +153,10 @@ int main(int argc, char **argv) {
     double ambient = 0;
     uint64_t ambient_time = 0;
     int have_ambient = 0;
+    unsigned did_values = 0;
     const unsigned tick_ms = 35;
     const unsigned minimum_idle_ms = 3;
+    const unsigned read_retry_ms = 2000;
     /* Each slow signal has its own deadline. Stagger temperature reads
      * after the first scan so they do not delay the fast gauges together. */
     const unsigned dids[] = {0x4201,0x4205,0x5889,0x4a49,0x580f,0xda12,0x56d7,0x586f,0x4300};
@@ -147,6 +165,7 @@ int main(int argc, char **argv) {
     uint64_t due[sizeof dids/sizeof dids[0]] = {0};
     uint64_t failed_until[sizeof dids/sizeof dids[0]] = {0};
     int ethanol=0, diesel=0;
+    int check_fuel_support=1, fuel_supported=1;
     uint64_t next_hud=0;
     unsigned selected=(1u << 8) - 1;
     uint64_t next_ethanol=0;
@@ -178,7 +197,6 @@ int main(int argc, char **argv) {
     memset(&cfg, 0, sizeof cfg);
     cfg.host = host; cfg.port = port; cfg.transport = transport; cfg.kind = DIAG_LOOP;
     cfg.dsi_name = "boostdeck"; cfg.session = session;
-    diag_link_init(&link, &cfg);
     diag_link_signals();
     if (trace_reads) most_log_level(MOST_LOG_I);
     if (session && (parent <= 1 || demo)) return 2;
@@ -186,8 +204,13 @@ int main(int argc, char **argv) {
     if (sock < 0) { perror("UDP socket"); return 1; }
     if (!demo) {
         active = gauge_bind(BOOST_ACTIVE_PORT);
-        if (active < 0) { close(sock); return 1; }
+        if (active < 0) {
+            if (errno != EADDRINUSE) { perror("BoostDeck HUD sharing socket"); close(sock); return 1; }
+            fputs("BoostDeck HUD sharing port already in use. Collecting gauges without HUD sharing.\n", stderr);
+            session = cfg.session = 1; /* arbitrate diagnostic traffic even without the HUD marker */
+        }
     }
+    diag_link_init(&link, &cfg);
     memset(&dest,0,sizeof dest); dest.sin_family=AF_INET; dest.sin_port=htons((uint16_t)udp_port);
     inet_pton(AF_INET,"127.0.0.1",&dest.sin_addr); /* local process IPC only */
     memset(&f,0,sizeof f); f.demo=(unsigned)demo;
@@ -229,31 +252,31 @@ int main(int argc, char **argv) {
                 if (diesel && dids[i] != 0xda12) continue;
                 if (!(selected & (1u << (i ? i-1 : BD_BOOST)))) continue;
                 if ((no_trans || on_most) && dids[i] == 0xda12) continue;
-                if ((session || on_most) && start < failed_until[i]) continue;
+                if (start < failed_until[i]) continue;
                 if (!full_scan && periods[i] && start < due[i]) continue;
                 if (full_scan) due[i]=start+first_delay[i];
                 else if (periods[i]) {
                     due[i]+=periods[i];
                     if (due[i]<=start) due[i]=start+periods[i];
                 }
-                kept = i != 0 ? f.valid & (1u << (i-1)) : 0;
+                /* Preserve values supplied by OBD while retrying the preferred DID. */
+                kept = i ? f.valid & did_values & (1u << (i-1)) : 0;
                 f.valid &= ~kept;
                 rc = read_did(&link, dids[i] == 0xda12 ? 0x18 : 0x12, dids[i], &v);
                 if (rc == -3) { /* skip it for a while; a value still fresh stays shown */
-                    failed_until[i] = bd_mono_ms()+2000;
+                    failed_until[i] = bd_mono_ms()+read_retry_ms;
                     if (kept) {
                         uint64_t age = bd_mono_ms()-observed[i-1];
                         f.age_ms[i-1] = age > 999999 ? 999999 : (unsigned)age;
                         f.valid |= kept;
                         if (!bd_is_fresh(&f, i-1, 0)) f.valid &= ~kept;
                     }
-                    stopped = 1;
-                    break;
+                    continue;
                 }
                 if (rc < 0) {
                     diag_link_drop(&link);
                     if (diag_link_lost(&link)) { most_lost = 1; diag_running = 0; }
-                    else if (session) failed_until[i]=bd_mono_ms()+2000;
+                    else if (session) failed_until[i]=bd_mono_ms()+read_retry_ms;
                     else {
                         f.valid=0;
                         have_ambient=0;
@@ -261,6 +284,7 @@ int main(int argc, char **argv) {
                     stopped = 1;
                     break;
                 }
+                if (!rc) failed_until[i]=bd_mono_ms()+read_retry_ms;
                 if (i == 0) {
                     have_ambient=rc != 0;
                     if (have_ambient) { ambient=v; ambient_time=bd_mono_ms(); }
@@ -272,11 +296,11 @@ int main(int argc, char **argv) {
                     v = (v-ambient) * .145037738; /* kPa absolute - measured ambient -> gauge psi */
                 }
                 if (i == 2) v *= 14.7; /* measured lambda -> gasoline-equivalent AFR */
+                did_values |= 1u << (i-1);
                 f.value[i-1]=v; observed[i-1]=bd_mono_ms(); f.valid |= 1u << (i-1);
                 /* A tunnel read is slow, so each new value goes out at once. */
                 if (diag_link_on_most(&link) && !send_frame(sock,&dest,&f,observed)) { perror("send frame"); diag_running=0; }
             }
-            (void)stopped; /* only the extended-signal reads below use it */
             for (i=0; up && !stopped && diag_running &&
                       i < sizeof obd_pids / sizeof obd_pids[0]; ++i) {
                 const unsigned k = obd_pids[i].slot;
@@ -285,15 +309,22 @@ int main(int argc, char **argv) {
                 const unsigned wanted = selected | (diesel && (selected & (1u<<BD_BOOST)) ?
                                                          (1u<<BD_BARO) : 0);
                 if (!(wanted & (1u<<k)) || (obd_pids[i].diesel_only && !diesel)) continue;
+                const int fallback = !diesel && (k == BD_COOLANT || k == BD_RAIL);
+                if (fallback && (did_values & f.valid & (1u<<k)) &&
+                    bd_mono_ms()-observed[k] < (k == BD_RAIL ? BD_STALE_MS : BD_TEMP_STALE_MS)) continue;
                 if (start < obd_due[i] || start < obd_failed_until[i]) continue;
-                if (full_scan && i && !obd_due[i]) { obd_due[i]=start+100+i*65; continue; }
+                if (full_scan && i && !obd_due[i] && !fallback) {
+                    obd_due[i]=start+100+i*65;
+                    continue;
+                }
                 obd_due[i]=start+2000;
-                rc = read_pid(&link, obd_pids[i].pid, &v);
-                if (rc == -3) { obd_failed_until[i]=bd_mono_ms()+2000; break; }
+                rc = k == BD_FUEL_RATE ? read_fuel_rate(&link,&check_fuel_support,&fuel_supported,&v) :
+                                         read_pid(&link,obd_pids[i].pid,&v);
+                if (rc == -3) { obd_failed_until[i]=bd_mono_ms()+read_retry_ms; continue; }
                 if (rc < 0) {
                     diag_link_drop(&link);
                     if (diag_link_lost(&link)) { most_lost = 1; diag_running = 0; }
-                    else if (session) obd_failed_until[i]=bd_mono_ms()+2000;
+                    else if (session) obd_failed_until[i]=bd_mono_ms()+read_retry_ms;
                     else {
                         f.valid=0;
                         have_ambient=0;
@@ -301,6 +332,7 @@ int main(int argc, char **argv) {
                     break;
                 }
                 if (!rc) { f.valid &= ~(1u<<k); continue; }
+                did_values &= ~(1u << k);
                 if (k == BD_BOOST) {
                     if (!(f.valid & (1u<<BD_BARO)) || bd_mono_ms()-observed[BD_BARO]>=BD_TEMP_STALE_MS)
                         continue;

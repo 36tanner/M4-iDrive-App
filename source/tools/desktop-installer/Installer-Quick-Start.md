@@ -1,4 +1,4 @@
-# ID6Apps Desktop Installer v0.7.5
+# ID6Apps Desktop Installer v0.7.6
 
 The macOS app supports Apple silicon and Intel Macs. On Windows, open the x64 folder for Intel or AMD PCs, or the ARM64 folder for Windows on ARM.
 

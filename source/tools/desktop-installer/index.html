@@ -2,7 +2,7 @@
 <html lang="en">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ID6Apps Installer (beta)</title>
+<title>ID6Apps Installer</title>
 <style>
 :root{color-scheme:dark;font:16px/1.5 system-ui,sans-serif;color:#f1f4f8;background:#101318}
 *{box-sizing:border-box}
@@ -34,7 +34,7 @@ code{display:block;overflow-wrap:anywhere;margin-bottom:1rem}
 </style>
 <main>
 <header>
-<h1>ID6Apps Installer (beta)</h1>
+<h1>ID6Apps Installer</h1>
 <p>Park the car and wake iDrive. Enable temporary SSH with <a href="https://ssh.bavarian-aa.uk/" target="_blank" rel="noopener noreferrer">Bavarian SSH Client</a> before continuing.</p>
 </header>
 <form id="installer">
@@ -45,10 +45,12 @@ code{display:block;overflow-wrap:anywhere;margin-bottom:1rem}
 <label><input type="checkbox" name="apps" value="ShiftDeck" checked>ShiftDeck</label>
 <label><input type="checkbox" name="apps" value="LaunchDeck">LaunchDeck</label>
 <label><input type="checkbox" name="apps" value="WarmDeck">WarmDeck</label>
+<label><input type="checkbox" name="apps" value="HybridDeck">HybridDeck</label>
 <label><input type="checkbox" name="apps" value="HudTest">HUD Gauges (experimental)</label>
 <p class="hint">HUD Gauges is enabled per iDrive session. The overlay is unavailable when native Android Auto or a supported CarPlay HUD add-on is installed.</p>
 <label><input type="radio" name="tuning" value="MhdMaps">MHD+ Suite (includes Exhaust Flap and Max Cooling)</label>
-<label><input type="radio" name="tuning" value="Bootmod3Suite">Bootmod3 Suite (beta)</label>
+<label><input type="radio" name="tuning" value="Bootmod3Suite">Bootmod3 Suite</label>
+<label><input type="radio" name="tuning" value="MgFlasher">MG Flasher</label>
 <label><input type="radio" name="tuning" value="" checked>No tuning suite</label>
 <label><input type="checkbox" name="apps" value="EngineCodes" checked>Engine Fault Codes</label>
 <label><input type="checkbox" name="apps" value="XDriveControl">xDrive Control (experimental)</label>
@@ -62,8 +64,10 @@ code{display:block;overflow-wrap:anywhere;margin-bottom:1rem}
 <label><input type="checkbox" name="remove" value="ShiftDeck">ShiftDeck</label>
 <label><input type="checkbox" name="remove" value="LaunchDeck">LaunchDeck</label>
 <label><input type="checkbox" name="remove" value="WarmDeck">WarmDeck</label>
+<label><input type="checkbox" name="remove" value="HybridDeck">HybridDeck</label>
 <label><input type="checkbox" name="remove" value="MhdMaps">MHD+ Suite</label>
 <label><input type="checkbox" name="remove" value="Bootmod3Suite">Bootmod3 Suite</label>
+<label><input type="checkbox" name="remove" value="MgFlasher">MG Flasher</label>
 <label><input type="checkbox" name="remove" value="EngineCodes">Engine Fault Codes</label>
 <label><input type="checkbox" name="remove" value="XDriveControl">xDrive Control (experimental)</label>
 <label><input type="checkbox" name="remove" value="RoadJet">Road Jet</label>

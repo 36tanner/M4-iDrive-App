@@ -39,7 +39,7 @@ type inspection struct {
 	screen                                       panel
 }
 
-var firmwarePattern = regexp.MustCompile(`(?i)\bNBTevo_([a-z][0-9]{5}[a-z])\b`)
+var firmwarePattern = regexp.MustCompile(`(?i)\bNBTevo(?:_|[ \t]+)([a-z][0-9]{5}[a-z])\b`)
 
 func firmwareName(text string) string {
 	m := firmwarePattern.FindStringSubmatch(text)
@@ -104,15 +104,11 @@ func (b *bounded) Write(p []byte) (int, error) {
 }
 
 func (r remote) run(cmd string, input []byte, limit int) ([]byte, error) {
-	if r.split {
+	if r.split && cmd != "cat /etc/nbt_version.txt" {
 		direct := r
 		direct.split = false
 		routed := "on -f hu-omap /bin/sh -c '" + strings.ReplaceAll(cmd, "'", "'\\''") + "'"
-		result, err := direct.run(routed, input, limit)
-		if cmd == "cat /opt/sys/etc/nbt_version.txt" && (err != nil || len(result) == 0) {
-			return direct.run("cat /etc/nbt_version.txt", input, limit)
-		}
-		return result, err
+		return direct.run(routed, input, limit)
 	}
 	timeout := r.commandTimeout
 	if timeout == 0 {
@@ -155,10 +151,21 @@ func isNBTPlatform(info []byte) bool {
 
 func inspect(r remoteRunner, in vehicleInput, gatewayCheck func(string, string) (string, error)) inspection {
 	result := inspection{Fingerprint: in.Fingerprint}
-	versionFile, _ := r.run("cat /opt/sys/etc/nbt_version.txt", nil, 1024)
-	detected := firmwareName(string(versionFile))
+	detected := ""
+	if in.Split {
+		versionFile, err := r.run("cat /etc/nbt_version.txt", nil, 1024)
+		if err == nil {
+			detected = firmwareName(string(versionFile))
+		}
+	}
+	if detected == "" {
+		versionFile, err := r.run("cat /opt/sys/etc/nbt_version.txt", nil, 1024)
+		if err == nil {
+			detected = firmwareName(string(versionFile))
+		}
+	}
 	entered := firmwareName(in.Version)
-	if in.Version != "" && !strings.EqualFold(in.Version, entered) {
+	if in.Version != "" && (entered == "" || firmwarePattern.FindString(in.Version) != in.Version) {
 		result.Result = "Enter the full NBTevo code shown on iDrive."
 		return result
 	}
@@ -175,29 +182,37 @@ func inspect(r remoteRunner, in vehicleInput, gatewayCheck func(string, string) 
 		result.Result = "The head unit did not expose the screen version over SSH. Enter the full code shown in iDrive and check again."
 		return result
 	}
-	profile, ok := profiles[result.Version]
-	if !ok {
-		result.Result = "This firmware needs a compatible native build. Use the read-only capture tool linked in the repository to share a compatibility report."
-		return result
-	}
 	info, err := r.run("uname -a", nil, 1024)
 	if err != nil || !isNBTPlatform(info) {
 		result.Result = "The head unit must report QNX 6.5.0 ARM."
 		return result
 	}
-	for _, framework := range []struct{ name, hash string }{{appFramework, profile.app}, {coreFramework, profile.core}} {
+	var actual frameworkPair
+	for _, framework := range []struct {
+		name string
+		hash *string
+	}{{appFramework, &actual.app}, {coreFramework, &actual.core}} {
 		raw, err := r.run("cat /opt/hmi/ID5/lib/"+framework.name, nil, 4<<20)
 		if err != nil {
 			result.Result = "Could not read " + framework.name + " over SSH. Check the head-unit IP and temporary SSH access."
 			return result
 		}
-		if digest(raw) != framework.hash {
-			result.Result = "The on-car framework fingerprint for " + framework.name + " does not match the supplied capture. Check the head-unit IP. If it is correct, collect a new compatibility ZIP from this car."
-			return result
-		}
+		*framework.hash = digest(raw)
 	}
-	if captureOnly[result.Version] {
-		result.Result = result.Version + " matches the submitted framework fingerprints. This firmware still needs a native ABI check and parked runtime validation before installation."
+	if !approvedFrameworkPair(actual) {
+		profile, listed := profiles[result.Version]
+		switch {
+		case listed && actual == profile && captureOnly[result.Version]:
+			result.Result = result.Version + " matches the submitted framework fingerprints. This firmware still needs a native ABI check and parked runtime validation before installation."
+		case listed:
+			name := coreFramework
+			if actual.app != profile.app {
+				name = appFramework
+			}
+			result.Result = "The on-car framework fingerprint for " + name + " differs from the listed profile, and the pair has no approved match. Collect a compatibility ZIP from this car."
+		default:
+			result.Result = result.Version + " has no approved framework pair and needs a compatible native build. Use the read-only capture tool linked in the repository to share a compatibility report."
+		}
 		return result
 	}
 	display, err := r.run("LD_LIBRARY_PATH=/opt/sys/lib:/lib:/usr/lib /opt/sys/bin/LayerManagerControl get screen 0", nil, 8192)
@@ -260,6 +275,7 @@ var apps = []plugin{
 	{"ShiftDeck", "shift-deck-qnx", "104"},
 	{"MhdMaps", "mhd-maps-qnx", "103"},
 	{"Bootmod3Suite", "bootmod3-qnx", "111"},
+	{"MgFlasher", "mgflasher-qnx", "116"},
 	{"EngineCodes", "engine-codes-qnx", "102"},
 	{"XDriveControl", "xdrive-control-qnx", "112"},
 	{"RoadJet", "road-jet-qnx", "217"},
@@ -267,6 +283,7 @@ var apps = []plugin{
 	{"LaunchDeck", "shift-deck-qnx", "120"},
 	{"HudTest", "hud-shape-qnx", "107"},
 	{"WarmDeck", "warmdeck-collector-qnx", "115"},
+	{"HybridDeck", "hybriddeck-collector-qnx", "117"},
 }
 
 func checkAppLayouts(screen panel, selection []plugin) error {

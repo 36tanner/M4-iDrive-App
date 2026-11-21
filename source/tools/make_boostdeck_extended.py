@@ -21,6 +21,7 @@ ALERT_BACKGROUND = 56999
 TRANSPARENT = 57000
 DIAL_FIRST = 57001
 DIAL_STEPS = 12
+DIAL_SIZE = 96
 WIDTH, HEIGHT = 1172, 400
 SETTINGS = (
     ("Pressure", 3), ("Speed", 2), ("Temperature", 2), ("Gauge style", 2),
@@ -47,6 +48,17 @@ def button(parent, identifier, action, text="", model=None):
     node = ET.SubElement(parent, "button", id=str(identifier), action=str(action), text=text)
     if model is not None:
         node.set("model", str(model))
+
+
+def radio_model(models, identifier):
+    ET.SubElement(models, "raBoolModel", id=str(identifier))
+
+
+def radio(parent, identifier, action, selected, text="", text_model=None):
+    node = ET.SubElement(parent, "radiobutton", id=str(identifier), action=str(action),
+                         model=str(selected), text=text)
+    if text_model is not None:
+        node.set("textModel", str(text_model))
 
 
 def goto(actions, number, target):
@@ -104,8 +116,10 @@ def update_xml():
         for option in range(count):
             offset = row * 20 + option
             richtext(models, 700 + offset)
+            radio_model(models, 5000 + offset)
             choose(actions, 2000 + offset, 2400 + offset, 2800 + offset, 520)
-            button(options, 700 + offset, 2000 + offset, model=700 + offset)
+            radio(options, 700 + offset, 2000 + offset, 5000 + offset,
+                  text_model=700 + offset)
     for model, target, title in ((110, 104, "Gauge color"), (360, 501, "Engine profile"),
                                   (None, 500, "Configure gauges")):
         goto(actions, target, target)
@@ -114,14 +128,17 @@ def update_xml():
         button(settings, 550 + target, target, "" if model else title, model)
     colors = page(states, 104, 520, "Gauge color")
     for i, name in enumerate(THEMES):
+        radio_model(models, 5200 + i)
         choose(actions, 2200 + i, 40 + i, 3000 + i, 520)
-        button(colors, 390 + i, 2200 + i, name)
+        radio(colors, 390 + i, 2200 + i, 5200 + i, name)
     profile = page(states, 501, 520, "Engine profile")
     for i, caption in enumerate(("Gasoline", "Diesel (standard OBD PIDs)")):
+        radio_model(models, 5210 + i)
         choose(actions, 2210 + i, 502 + i, 3010 + i, 520)
-        button(profile, 591 + i, 2210 + i, caption)
+        radio(profile, 591 + i, 2210 + i, 5210 + i, caption)
     config = page(states, 500, 520, "Configure gauges")
     for signal in range(len(SIGNALS)):
+        radio_model(models, 5300 + signal)
         choose(actions, 3500 + signal, 600 + signal, 4500 + signal, 500)
     for i in range(SLOTS):
         x, y = tile(i)
@@ -133,18 +150,18 @@ def update_xml():
             placed(components, "label", 260+i, 370+i, x+15, y+16, 216, 40)
             placed(components, "label", 310+i, 300+i, x+15, y+55, 216, 48)
             placed(components, "image", 280+i, 320+i, x+15, y+140, 210, 15)
-            placed(components, "image", 290+i, 330+i, x+83, y+110, 64, 64)
+            placed(components, "image", 290+i, 330+i, x+67, y+94, DIAL_SIZE, DIAL_SIZE)
         else:
             placed(components, "label", 260+i, 370+i, x+10, y+10, 120, 46)
             placed(components, "image", 280+i, 320+i, x+50, y+58, 40, 250)
-            placed(components, "image", 290+i, 330+i, x+38, y+143, 64, 64)
+            placed(components, "image", 290+i, 330+i, x+22, y+128, DIAL_SIZE, DIAL_SIZE)
             placed(components, "label", 310+i, 300+i, x+24, y+322, 112, 63)
         target = 510 + i
         goto(actions, target, target)
         button(config, 540 + i, target, model=340+i)
         options = page(states, target, 500, f"Gauge {i+1}")
         for j, caption in enumerate(SIGNALS):
-            button(options, 3500 + i*40+j, 3500+j, caption)
+            radio(options, 3500 + i*40+j, 3500+j, 5300+j, caption)
     ET.indent(tree, space="  ")
     tree.write(XML, encoding="utf-8", xml_declaration=True)
 
@@ -178,18 +195,19 @@ def update_images(source, dest):
         write(ALERT_BACKGROUND, warning)
         write(TRANSPARENT, Image.new("RGBA", (1, 1)))
 
-        face = Image.new("RGBA", (64, 64))
+        face = Image.new("RGBA", (DIAL_SIZE, DIAL_SIZE))
         draw = ImageDraw.Draw(face)
-        draw.ellipse((2,2,61,61), fill="#18212b", outline="#354656", width=1)
-        draw.arc((6,6,57,57), 135, 405, fill="#596c80", width=3)
+        draw.ellipse((3,3,92,92), fill="#18212b", outline="#354656", width=2)
+        draw.arc((9,9,86,86), 135, 405, fill="#596c80", width=5)
 
         def point(angle, radius):
             radians = math.radians(angle)
-            return 32 + radius * math.cos(radians), 32 + radius * math.sin(radians)
+            center = DIAL_SIZE / 2
+            return center + radius * math.cos(radians), center + radius * math.sin(radians)
 
         for tick in range(5):
             angle = 135 + 270*tick/4
-            draw.line((point(angle, 20), point(angle, 24)), fill="#c2ced9", width=1)
+            draw.line((point(angle, 30), point(angle, 36)), fill="#c2ced9", width=2)
         write(DIAL_FIRST, face)
         for palette, color in enumerate(tuple(fill for _, fill in COLORS) + MULTICOLOR):
             for step in range(DIAL_STEPS + 1):
@@ -197,9 +215,9 @@ def update_images(source, dest):
                 draw = ImageDraw.Draw(image)
                 angle = 135 + 270*step/DIAL_STEPS
                 if step:
-                    draw.arc((6,6,57,57), 135, angle, fill=color, width=3)
-                draw.line(((32,32), point(angle,22)), fill=color, width=2)
-                draw.ellipse((29,29,35,35), fill=color)
+                    draw.arc((9,9,86,86), 135, angle, fill=color, width=5)
+                draw.line(((48,48), point(angle,33)), fill=color, width=3)
+                draw.ellipse((44,44,52,52), fill=color)
                 identifier = DIAL_FIRST + 1 + palette*(DIAL_STEPS+1) + step
                 write(identifier, image)
 

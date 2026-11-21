@@ -12,10 +12,17 @@ WORKER_COMMON = $(CORE_LINK) $(MOST) tests/fake_most_env.c $(FAKE_DSI) $(HEADERS
 HOST_LINK = $(CC) $(CFLAGS) -pthread -DMOST_HOST -Isrc/common -Isrc/ipc -Isrc/workers -Itests
 .PHONY: assets launch-assets test
 
-assets:
-	$(PYTHON) ../tools/make_bars.py
-	$(PYTHON) ../tools/make_drive_apps.py
+assets: | build
+	unzip -p ../../packages/dashboard.zip BoostDeck/BoostDeck_ALL_Images.zip > build/boostdeck-base-images.zip
+	$(PYTHON) ../tools/make_boostdeck_extended.py --images build/boostdeck-base-images.zip --images-out build/BoostDeck_ALL_Images.zip
+	mv build/BoostDeck_ALL_Images.zip manifests/
+	@set -e; for app in MhdMaps ShiftDeck; do \
+		name=$${app}_ALL_Images.zip; \
+		unzip -p ../../packages/dashboard.zip "$$app/$$name" > "build/$$name"; \
+		mv "build/$$name" manifests/; \
+	done
 	$(PYTHON) ../tools/make_warmdeck.py
+	$(PYTHON) ../tools/make_hybrid_and_mg.py
 
 build:
 	mkdir -p build
@@ -33,6 +40,12 @@ build/engine-codes: src/workers/engine_codes_worker.c $(WORKER_COMMON) | build
 	$(HOST_LINK) $(filter %.c,$^) -lm -o $@
 
 build/bootmod3: src/workers/bootmod3_suite_worker.c src/workers/bm3_profiles.h $(WORKER_COMMON) | build
+	$(HOST_LINK) $(filter %.c,$^) -lm -o $@
+
+build/mgflasher: src/workers/mg_flasher_worker.c $(WORKER_COMMON) | build
+	$(HOST_LINK) $(filter %.c,$^) -lm -o $@
+
+build/hybriddeck-collector: src/workers/hybrid_deck_worker.c src/ipc/hybrid_frame.h $(WORKER_COMMON) | build
 	$(HOST_LINK) $(filter %.c,$^) -lm -o $@
 
 build/xdrive-control: src/workers/xdrive_control_worker.c $(WORKER_COMMON) | build
@@ -74,7 +87,7 @@ build/test-boost-preferences: tests/test_boost_preferences.cpp build/boost-test-
 launch-assets:
 	$(PYTHON) ../tools/launch_art.py
 
-test: build/xdrive-control build/boost-deck build/shift-deck build/mhd-maps build/engine-codes build/test-core build/test-most build/test-diag-link build/bootmod3 build/exhaust-flap build/test-launch-timer build/test-launch-records build/test-boost-preferences build/test-warm-progress build/warmdeck-collector
+test: build/xdrive-control build/boost-deck build/shift-deck build/mhd-maps build/engine-codes build/test-core build/test-most build/test-diag-link build/bootmod3 build/exhaust-flap build/test-launch-timer build/test-launch-records build/test-boost-preferences build/test-warm-progress build/warmdeck-collector build/mgflasher build/hybriddeck-collector
 	./build/test-warm-progress
 	./build/test-boost-preferences
 	./build/test-launch-timer

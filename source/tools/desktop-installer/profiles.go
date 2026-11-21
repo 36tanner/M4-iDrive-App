@@ -28,3 +28,14 @@ func readProfiles(data []byte) (map[string]frameworkPair, map[string]bool) {
 	}
 	return pairs, pending
 }
+
+// The installer uses one native payload. Two exact framework matches identify
+// an approved ABI even when the vehicle reports a different firmware label.
+func approvedFrameworkPair(actual frameworkPair) bool {
+	for version, pair := range profiles {
+		if !captureOnly[version] && pair == actual {
+			return true
+		}
+	}
+	return false
+}

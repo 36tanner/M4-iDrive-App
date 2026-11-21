@@ -48,11 +48,29 @@ static void restore_code_session(struct diag_link *link) {
                             response,sizeof response,2000,&negative);
 }
 
-static void fault_codes(struct diag_link *link, int clear) {
-    /* Fault, pending, confirmed, failed since clear, or warning requested.
-     * Bits 0x10 and 0x40 only report incomplete tests. */
-    enum { fault_status = 0xaf, clear_timeout = 15000 };
-    const unsigned char read_request[]={0x19,0x02,fault_status}, read_reply[]={0x59,0x02};
+/* Include active, pending, confirmed and historical failure bits, plus warnings. */
+enum { fault_status = 0xaf };
+
+static int read_codes(struct diag_link *link, unsigned char *reply, unsigned capacity,
+                      unsigned *negative, int trace) {
+    const unsigned char request[]={0x19,0x02,fault_status}, prefix[]={0x59,0x02};
+    const int count=diag_link_request(link,0x12,request,sizeof request,prefix,sizeof prefix,
+                                      reply,capacity,1800,negative);
+    if (trace) {
+        if (count<0) {
+            if (count==-2) fprintf(stderr,"DME 12 19 02 AF rejected (NRC %02X)\n",*negative);
+            else fprintf(stderr,"DME 12 19 02 AF returned no matching reply\n");
+        } else {
+            fputs("DME 12 19 02 AF reply:",stderr);
+            for (int i=0;i<count;++i) fprintf(stderr," %02X",reply[i]);
+            fputc('\n',stderr);
+        }
+    }
+    return count;
+}
+
+static void fault_codes(struct diag_link *link, int clear, int trace) {
+    enum { clear_timeout = 15000 };
     const unsigned char clear_request[]={0x14,0xff,0xff,0xff}, clear_reply[]={0x54};
     unsigned char reply[4094];
     unsigned negative;
@@ -93,12 +111,12 @@ static void fault_codes(struct diag_link *link, int clear) {
         // and verify in the same session before restoring its default.
         code_wait(350);
     }
-    n=diag_link_request(link,0x12,read_request,3,read_reply,2,reply,sizeof reply,1800,&negative);
+    n=read_codes(link,reply,sizeof reply,&negative,trace);
     if (clear && n<3 && diag_running) {
         // Recheck is read-only. Reconnect on a lost HSFZ link without issuing another clear.
         if (n==-1 && !diag_link_on_most(link)) diag_link_drop(link);
         if (diag_link_up(link))
-            n=diag_link_request(link,0x12,read_request,3,read_reply,2,reply,sizeof reply,1800,&negative);
+            n=read_codes(link,reply,sizeof reply,&negative,trace);
     }
     if (extended) restore_code_session(link);
     if (n==-2) {
@@ -126,7 +144,7 @@ static void fault_codes(struct diag_link *link, int clear) {
 int main(int argc, char **argv) {
     const char *host=0;
     unsigned port=6801;
-    int mode=0, transport=DIAG_AUTO, i;
+    int mode=0, transport=DIAG_AUTO, trace=0, i;
     struct diag_link link;
     struct diag_link_cfg cfg;
     for (i=1;i<argc;++i) {
@@ -135,12 +153,13 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i],"--transport") && i+1<argc && !strcmp(argv[i+1],"auto")) ++i;
         else if (!strcmp(argv[i],"--transport") && i+1<argc && !strcmp(argv[i+1],"hsfz")) { transport=DIAG_HSFZ; ++i; }
         else if (!strcmp(argv[i],"--transport") && i+1<argc && !strcmp(argv[i+1],"most")) { transport=DIAG_MOST; ++i; }
+        else if (!strcmp(argv[i],"--trace")) trace=1;
         else if (!strcmp(argv[i],"--codes") && !mode) mode=1;
         else if (!strcmp(argv[i],"--clear") && !mode) mode=2;
         else break;
     }
-    if (i!=argc || !mode || (transport==DIAG_HSFZ && !host)) {
-        fprintf(stderr,"Usage: %s [--host IPv4] [--transport auto|hsfz|most] [--port 6801] (--codes | --clear)\n",argv[0]);
+    if (i!=argc || !mode || (trace && mode!=1) || (transport==DIAG_HSFZ && !host)) {
+        fprintf(stderr,"Usage: %s [--host IPv4] [--transport auto|hsfz|most] [--port 6801] (--codes [--trace] | --clear)\n",argv[0]);
         return 2;
     }
     diag_link_signals();
@@ -152,7 +171,7 @@ int main(int argc, char **argv) {
                                : "Could not reserve the diagnostics connection");
         return 0;
     }
-    fault_codes(&link,mode==2);
+    fault_codes(&link,mode==2,trace);
     result_done();
     diag_link_close(&link);
     return 0;

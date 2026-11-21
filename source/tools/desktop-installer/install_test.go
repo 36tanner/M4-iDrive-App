@@ -43,13 +43,7 @@ func (r identifyOnly) run(cmd string, _ []byte, _ int) ([]byte, error) {
 	return []byte(r.version + "\r\n"), nil
 }
 
-func TestUnsupportedFirmwareStopsBeforePayloadCheck(t *testing.T) {
-	for _, version := range []string{"NBTevo_H16205L", "NBTevo_K17052I", "NBTevo_Z24000I"} {
-		got := inspect(identifyOnly{version, t}, vehicleInput{}, checkGateway)
-		if got.Ready || got.Version != version || !strings.Contains(got.Result, "compatible native build") {
-			t.Errorf("%s: %+v", version, got)
-		}
-	}
+func TestConflictingFirmwareEntryStopsBeforeFrameworkCheck(t *testing.T) {
 	got := inspect(identifyOnly{"NBTevo_N18092I", t}, vehicleInput{Version: "NBTevo_Y24073J"}, checkGateway)
 	if got.Ready || !strings.Contains(got.Result, "differs") {
 		t.Fatal(got)
@@ -477,7 +471,7 @@ func TestInstallLaunchDeckAndHUD(t *testing.T) {
 func TestCompactInstallStagesHUDMenuAndDashboardArtwork(t *testing.T) {
 	for _, size := range []panel{{800, 480}, {960, 480}} {
 		t.Run(size.String(), func(t *testing.T) {
-			selection, err := choose([]string{"BoostDeck", "HudTest", "WarmDeck"})
+			selection, err := choose([]string{"BoostDeck", "HudTest", "WarmDeck", "HybridDeck", "MgFlasher"})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -487,7 +481,12 @@ func TestCompactInstallStagesHUDMenuAndDashboardArtwork(t *testing.T) {
 				t.Fatal(err)
 			}
 			sizeDir := fmt.Sprintf("%dx%d", size.width, size.height)
-			for _, name := range []string{"BoostDeck/BoostDeck.xml", "BoostDeck/BoostDeck_ALL_Images.zip", "HudTest/HudTest.xml", "WarmDeck/WarmDeck.xml", "WarmDeck/WarmDeck_ALL_Images.zip"} {
+			for _, name := range []string{
+				"BoostDeck/BoostDeck.xml", "BoostDeck/BoostDeck_ALL_Images.zip", "HudTest/HudTest.xml",
+				"WarmDeck/WarmDeck.xml", "WarmDeck/WarmDeck_ALL_Images.zip",
+				"HybridDeck/HybridDeck.xml", "HybridDeck/HybridDeck_ALL_Images.zip",
+				"MgFlasher/MgFlasher.xml", "MgFlasher/MgFlasher_ALL_Images.zip",
+			} {
 				want, err := bundled.ReadFile("payload/layouts/" + sizeDir + "/" + filepath.Base(name))
 				if err != nil {
 					t.Fatal(err)
@@ -503,8 +502,8 @@ func TestCompactInstallStagesHUDMenuAndDashboardArtwork(t *testing.T) {
 
 func TestCaptureOnlyProfileMatchesWithoutEnablingInstall(t *testing.T) {
 	const version = "NBTevo_J16383I"
-	if !captureOnly[version] || !captureOnly["NBTevo_O18184I"] {
-		t.Fatal("the submitted capture-only profiles are missing")
+	if !captureOnly[version] || captureOnly["NBTevo_O18184I"] {
+		t.Fatal("unexpected capture-only status")
 	}
 	fixture := compatibilityFixture{
 		identifyOnly: identifyOnly{version, t},
@@ -519,5 +518,75 @@ func TestCaptureOnlyProfileMatchesWithoutEnablingInstall(t *testing.T) {
 	}
 	if profiles["NBTevo_W20204I"] != profiles["NBTevo_V20153I"] || captureOnly["NBTevo_W20204I"] {
 		t.Fatal("W20204I should reuse the verified V20153I framework pair")
+	}
+}
+
+type splitFirmwareFixture struct {
+	compatibilityFixture
+	jacintoVersion string
+}
+
+func (r splitFirmwareFixture) run(cmd string, input []byte, limit int) ([]byte, error) {
+	if cmd == "cat /etc/nbt_version.txt" {
+		return []byte(r.jacintoVersion), nil
+	}
+	return r.compatibilityFixture.run(cmd, input, limit)
+}
+
+func TestSplitFirmwarePrefersJacintoScreenVersion(t *testing.T) {
+	const version = "NBTevo_Y22292I"
+	fixture := splitFirmwareFixture{
+		compatibilityFixture: compatibilityFixture{
+			identifyOnly: identifyOnly{"NBTevo_Z24000I", t},
+			app:          []byte("app"), core: []byte("core"),
+			display: "- resolution: x=1280, y=480",
+		},
+		jacintoVersion: "NBTevo Y22292I\n",
+	}
+	saved := profiles[version]
+	profiles[version] = frameworkPair{digest(fixture.app), digest(fixture.core)}
+	defer func() { profiles[version] = saved }()
+	in := vehicleInput{Split: true, Head: "169.254.21.10", Gateway: "169.254.21.3"}
+	gateway := func(_, _ string) (string, error) { return in.Head, nil }
+	for _, entered := range []string{"", "nbtevo y22292i", version} {
+		in.Version = entered
+		if got := inspect(fixture, in, gateway); !got.Ready || got.Version != version {
+			t.Fatalf("%q: %+v", entered, got)
+		}
+	}
+}
+
+func TestInspectUsesApprovedFrameworkPairForFirmwareVariants(t *testing.T) {
+	app, core := []byte("approved app"), []byte("approved core")
+	profile, only := "NBTevo_V20153I", "NBTevo_J16383I"
+	savedProfile, savedOnly := profiles[profile], profiles[only]
+	profiles[profile] = frameworkPair{digest(app), digest(core)}
+	profiles[only] = frameworkPair{digest(app), digest([]byte("capture-only core"))}
+	defer func() {
+		profiles[profile], profiles[only] = savedProfile, savedOnly
+	}()
+	in := vehicleInput{Head: "169.254.21.10", Gateway: "169.254.21.3"}
+	gateway := func(_, _ string) (string, error) { return in.Head, nil }
+	for _, tc := range []struct {
+		name, version string
+		app, core     []byte
+		ready         bool
+	}{
+		{"unlisted exact pair", "NBTevo_Z24000I", app, core, true},
+		{"listed variant exact pair", "NBTevo_W20204I", app, core, true},
+		{"only app matches", "NBTevo_Z24000I", app, []byte("other core"), false},
+		{"only core matches", "NBTevo_Z24000I", []byte("other app"), core, false},
+		{"capture-only pair", "NBTevo_Z24000I", app, []byte("capture-only core"), false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fixture := compatibilityFixture{
+				identifyOnly: identifyOnly{tc.version, t},
+				app:          tc.app, core: tc.core, display: "- resolution: x=1280, y=480",
+			}
+			got := inspect(fixture, in, gateway)
+			if got.Ready != tc.ready || got.Version != tc.version {
+				t.Fatalf("unexpected inspection: %+v", got)
+			}
+		})
 	}
 }

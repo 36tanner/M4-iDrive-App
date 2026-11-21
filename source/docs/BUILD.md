@@ -30,11 +30,7 @@ sh native/build.sh
 
 The script builds the native libraries and diagnostic workers. The dashboard diagnostic workers use the [MOST fallback](MOST.md), which loads the DSI library at runtime. The MHD+ Suite package also includes a dedicated Exhaust Flap worker as `MhdMaps/exhaust-flap-worker-qnx`. It uses the PR #29 commands and the shared HSFZ-to-MOST fallback. Use `tools/merge_exhaust_flap_page.py` to assemble the submenu from the original flap artwork and the MHD+ Suite image archive. The packaged XML and matching image archives must be deployed together.
 
-Regenerate BoostDeck's settings XML and circular dial artwork together. Extract
-`BoostDeck/BoostDeck_ALL_Images.zip` from the previous dashboard package and pass
-it as `--images` to `tools/make_boostdeck_extended.py`, with a separate
-`--images-out` path. Stage the generated XML and image ZIP together. The
-alert chime is a separate invocation of the BoostDeck worker and uses the
+Run `make -C native assets` from the source directory to regenerate the BoostDeck layout and dial artwork. The target uses the base artwork from the dashboard package and stages the matching MHD and ShiftDeck images alongside their manifests. The alert chime is a separate invocation of the BoostDeck worker and uses the
 head unit's preferred QNX PCM playback route.
 [QNX PCM playback documentation](https://www.qnx.com/developers/docs/6.5.0SP1/neutrino/audio/pcm.html)
 

@@ -16,7 +16,7 @@ func TestSupraFirmwareProfileMatchesReportedFrameworks(t *testing.T) {
 
 func TestNewProfilesMatchExistingPairs(t *testing.T) {
 	for newVersion, existing := range map[string]string{
-		"M17345I": "M17365I", "R19101I": "R19144I", "S19221I": "S19322I", "T23235J": "Y23236I",
+		"K17052I": "M17345I", "M17345I": "M17365I", "R19101I": "R19144I", "S19221I": "S19322I", "T23235J": "Y23236I",
 	} {
 		got, present := profiles["NBTevo_"+newVersion]
 		want, known := profiles["NBTevo_"+existing]

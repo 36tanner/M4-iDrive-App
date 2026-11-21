@@ -45,8 +45,9 @@ func selectMenus(names []string, removal bool) ([]plugin, error) {
 	if len(selected) == 0 || len(selected) != len(names) {
 		return nil, errors.New("Choose at least one available menu.")
 	}
-	if !removal && seen["MhdMaps"] && seen["Bootmod3Suite"] {
-		return nil, errors.New("Choose the tuning suite that matches your car: MHD+ Suite or Bootmod3 Suite.")
+	if !removal && ((seen["MhdMaps"] && seen["Bootmod3Suite"]) ||
+		(seen["MgFlasher"] && (seen["MhdMaps"] || seen["Bootmod3Suite"]))) {
+		return nil, errors.New("Choose the tuning suite that matches your car: MHD+, Bootmod3, or MG Flasher.")
 	}
 	return selected, nil
 }

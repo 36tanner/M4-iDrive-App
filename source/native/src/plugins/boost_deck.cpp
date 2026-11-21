@@ -148,7 +148,11 @@ public:
     template <unsigned Slot> bool editGauge(const bmw::Parcel& event) {
         bool show;
         if (event.readBool(show)) {
-            if (show) editing_=Slot;
+            if (show) {
+                editing_=Slot;
+                for (unsigned signal=0;signal<BD_COUNT;++signal)
+                    updateModel(5300u+signal,signals_[diesel_][Slot]==signal);
+            }
             else if (editing_==Slot) editing_=kBarCount;
         }
         return true;
@@ -339,6 +343,8 @@ void BoostDeck::updateSettings() {
     char label[80];
     snprintf(label,sizeof label,"Gauge color: %s",kColorNames[preferences_.color]);
     updateModel(110u,bmw::BasicString<char>(label));
+    for (unsigned color=0;color<sizeof kColorNames / sizeof kColorNames[0];++color)
+        updateModel(5200u+color,preferences_.color==color);
     for (unsigned row=0;row<BOOST_SETTING_COUNT;++row) {
         char value[32];
         settingValue(preferences_,row,preferences_.choice[row],value,sizeof value);
@@ -347,6 +353,7 @@ void BoostDeck::updateSettings() {
         for (unsigned choice=0;choice<kBoostChoices[row];++choice) {
             settingValue(preferences_,row,choice,value,sizeof value);
             updateModel(700u+row*20u+choice,bmw::BasicString<char>(value));
+            updateModel(5000u+row*20u+choice,preferences_.choice[row]==choice);
         }
     }
 }
@@ -479,6 +486,8 @@ void BoostDeck::updateAssignments() {
         updateModel(370u+i,bmw::BasicString<char>(caption));
     }
     updateModel(360u,bmw::BasicString<char>(diesel_ ? "Engine profile: Diesel" : "Engine profile: Gasoline"));
+    updateModel(5210u,!diesel_);
+    updateModel(5211u,diesel_);
     refresh();
 }
 

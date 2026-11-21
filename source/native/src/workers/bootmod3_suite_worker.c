@@ -90,28 +90,47 @@ static int bm3_match(const unsigned char *marker) {
     return matched;
 }
 
-static int bm3_profile(control_link fd) {
-    const unsigned char define[]={0x2c,2,0xf3,1,0x24,0x80,0x7f,0xfe,0x50,0,BM3_MARKER_SIZE};
-    const unsigned char defined[]={0x6c,2,0xf3,1}, read[]={0x22,0xf3,1}, prefix[]={0x62,0xf3,1};
-    const unsigned char direct[]={0x23,0x14,0x80,0x7f,0xfe,0x50,BM3_MARKER_SIZE}, direct_ack[]={0x63};
+/* These locations are shared with EntryNav Bootmod3 Suite for automatic ROM lookup. */
+static int unsupported_marker_read(unsigned nrc) {
+    return nrc==0x11 || nrc==0x12 || nrc==0x13 || nrc==0x31 || nrc==0x7e || nrc==0x7f;
+}
+
+static int bm3_profile(control_link link) {
+    static const unsigned char addresses[][4]={
+        {0x80,0x7f,0xfe,0x50},{0x09,0x77,0xfe,0x4c},
+        {0x80,0x1f,0xfd,0xac},{0x80,0x05,0xfe,0x1e},
+    };
+    static const unsigned char clear[]={0x2c,3,0xf3,1}, cleared[]={0x6c,3,0xf3,1};
+    static const unsigned char defined[]={0x6c,2,0xf3,1}, read[]={0x22,0xf3,1}, prefix[]={0x62,0xf3,1};
+    static const unsigned char direct_ack[]={0x63};
     unsigned char reply[512];
-    unsigned negative, offset=3;
-    int n=exchange(fd,0x12,define,sizeof define,defined,sizeof defined,reply,sizeof reply,1600,&negative);
-    if (n>=4) n=exchange(fd,0x12,read,sizeof read,prefix,sizeof prefix,reply,sizeof reply,1600,&negative);
-    // The upstream direct read covers an unsupported dynamic DID, including issue #95's NRC 31.
-    if (n==-2 && (negative==0x31 || negative==0x11 || negative==0x12)) {
-        offset=1;
-        n=exchange(fd,0x12,direct,sizeof direct,direct_ack,sizeof direct_ack,reply,sizeof reply,1600,&negative);
+    for (unsigned i=0;i<sizeof addresses/sizeof addresses[0] && diag_running;++i) {
+        unsigned char define[]={0x2c,2,0xf3,1,0x24,0,0,0,0,0,BM3_MARKER_SIZE};
+        unsigned char direct[]={0x23,0x14,0,0,0,0,BM3_MARKER_SIZE};
+        unsigned negative, offset=3;
+        memcpy(define+5,addresses[i],4);
+        memcpy(direct+2,addresses[i],4);
+        // Defining F301 again appends data unless the previous range is cleared.
+        int n=exchange(link,0x12,clear,sizeof clear,cleared,sizeof cleared,reply,sizeof reply,1600,&negative);
+        if (n>=4) n=exchange(link,0x12,define,sizeof define,defined,sizeof defined,reply,sizeof reply,1600,&negative);
+        if (n>=4) n=exchange(link,0x12,read,sizeof read,prefix,sizeof prefix,reply,sizeof reply,1600,&negative);
+        if (n==-2 && unsupported_marker_read(negative)) {
+            offset=1;
+            n=exchange(link,0x12,direct,sizeof direct,direct_ack,sizeof direct_ack,reply,sizeof reply,1600,&negative);
+        }
+        if (n==-2 && unsupported_marker_read(negative)) continue;
+        if (n<0) {
+            if (n==-2) printf("CustomROM identification refused (NRC %02X).\n",negative);
+            else puts("No Bootmod3 CustomROM identification reply.");
+            return -1;
+        }
+        if (n==(int)(offset+BM3_MARKER_SIZE)) {
+            const int matched=bm3_match(reply+offset);
+            if (matched>=0) return matched;
+        }
     }
-    if (n!=(int)(offset+BM3_MARKER_SIZE)) {
-        if (n==-2) printf("CustomROM identification refused (NRC %02X).\n",negative);
-        else if (n<0) puts("No Bootmod3 CustomROM identification reply.");
-        else puts("Unexpected Bootmod3 CustomROM identification layout.");
-        return -1;
-    }
-    int matched=bm3_match(reply+offset);
-    if (matched<0) puts("This Bootmod3 CustomROM is outside the supported profile list.");
-    return matched;
+    puts("This Bootmod3 CustomROM is outside the supported profile list.");
+    return -1;
 }
 
 static int write_memory(control_link fd, unsigned char sid, const unsigned char *address,
@@ -146,7 +165,24 @@ static unsigned current_map(control_link fd, const unsigned char *address, unsig
 static void control(control_link fd, const char *mode, unsigned value) {
     unsigned char reply[512];
     unsigned negative;
-    int profile=bm3_profile(fd), n;
+    int n;
+    // These two requests have no ROM-dependent addresses.
+    if (!strcmp(mode,"--flap")) {
+        const unsigned char req[]={0x2f,0x60,0xfd,value?3:0,value==1?0x14:0x23,value==1?0xfe:0x28};
+        const unsigned char ack[]={0x6f,0x60,0xfd,req[3]};
+        n=exchange(fd,0x12,req,value?6:4,ack,sizeof ack,reply,sizeof reply,1600,&negative);
+        if (n>=4) puts("Exhaust flap request accepted by DME.");
+        else puts("Exhaust flap request could not be confirmed.");
+        return;
+    }
+    if (!strcmp(mode,"--sound")) {
+        const unsigned char req[]={0x2e,0x5f,0xfd,value?0:1}, ack[]={0x6e,0x5f,0xfd};
+        n=exchange(fd,0x12,req,sizeof req,ack,sizeof ack,reply,sizeof reply,1600,&negative);
+        if (n>=3) puts("Active Sound request accepted by DME.");
+        else puts("Active Sound request could not be confirmed.");
+        return;
+    }
+    const int profile=bm3_profile(fd);
     if (profile<0) return;
     if (!strcmp(mode,"--current-map")) {
         unsigned actual=current_map(fd,profiles[profile].map,&negative);
@@ -182,26 +218,16 @@ static void control(control_link fd, const char *mode, unsigned value) {
         }
         if (value) printf("Burble preset %u verified by DME readback.\n",value*4);
         else puts("Burbles off, verified by DME readback.");
-    } else if (!strcmp(mode,"--flap") && value<=2) {
-        const unsigned char req[]={0x2f,0x60,0xfd,value?3:0,value==1?0x14:0x23,value==1?0xfe:0x28};
-        const unsigned char ack[]={0x6f,0x60,0xfd,req[3]};
-        n=exchange(fd,0x12,req,value?6:4,ack,sizeof ack,reply,sizeof reply,1600,&negative);
-        if (n>=4) puts("Exhaust flap request accepted by DME.");
-        else puts("Exhaust flap request could not be confirmed.");
-    } else if (!strcmp(mode,"--sound") && value<=1) {
-        const unsigned char req[]={0x2e,0x5f,0xfd,value?0:1}, ack[]={0x6e,0x5f,0xfd};
-        n=exchange(fd,0x12,req,sizeof req,ack,sizeof ack,reply,sizeof reply,1600,&negative);
-        if (n>=3) puts("Active Sound request accepted by DME.");
-        else puts("Active Sound request could not be confirmed.");
     }
 }
 
 int main(int argc,char **argv) {
     unsigned value, port=6801;
-    if ((argc!=5 && argc!=7) || strcmp(argv[1],"--host")) return 2;
-    if (argc==7) {
-        if (strcmp(argv[5],"--port")) return 2;
-        port=number(argv[6],1,65535);
+    if (argc<5 || strcmp(argv[1],"--host")) return 2;
+    for (int i=5;i<argc;i+=2) {
+        if (i+1>=argc) return 2;
+        if (!strcmp(argv[i],"--port")) port=number(argv[i+1],1,65535);
+        else return 2;
     }
     if (strcmp(argv[3],"--current-map") && strcmp(argv[3],"--map") && strcmp(argv[3],"--flap") && strcmp(argv[3],"--sound") && strcmp(argv[3],"--burbles")) return 2;
     value=number(argv[4],0,!strcmp(argv[3],"--map") ? 4 : !strcmp(argv[3],"--flap") ? 2 : !strcmp(argv[3],"--burbles") ? 3 : 1);

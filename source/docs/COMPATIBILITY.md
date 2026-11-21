@@ -1,10 +1,10 @@
 # Dashboard compatibility
 
-Match the reported firmware and both SHA-256 hashes before using the dashboard package. The desktop installers also check the display and select bundled layouts for 800 × 480, 960 × 480, 1280 × 480, 1440 × 540, and 1920 × 720. The raw dashboard ZIP uses the 1280 × 480 layout.
+Verify both live SHA-256 hashes against the same approved framework pair before using the dashboard package. The firmware label can differ when the pair matches. The desktop installers also check the display and select bundled layouts for 800 × 480, 960 × 480, 1280 × 480, 1440 × 540, and 1920 × 720. The raw dashboard ZIP uses the 1280 × 480 layout.
 
 ## Desktop installer profiles
 
-The installer checks firmware and framework pairs against [installer-profiles.json](installer-profiles.json). Reported results apply to the named menus and vehicles.
+The installer uses the approved framework pairs in [installer-profiles.json](installer-profiles.json) for installation eligibility. Reported results apply to the named menus and vehicles.
 
 | NBTevo firmware | AppFramework SHA-256 | CoreFramework SHA-256 | Evidence |
 | --- | --- | --- | --- |
@@ -18,6 +18,7 @@ The installer checks firmware and framework pairs against [installer-profiles.js
 
 | NBTevo firmware | Evidence |
 | --- | --- |
+| K17052I | Both reported framework hashes and sizes match the M17345I pair. The owner reports four apps running on a split-node F82 with a 1280 × 480 screen. [Issue 117](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/117) |
 | L17252I | Attached capture matches the audited M17345I pair byte for byte. |
 | M17365I | Both hashes in [#60](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/60) match the audited M17345I pair. The owner confirmed installation with v0.7.3 and reported missing telemetry for several gauges. |
 | Q18491I | The attached libraries match R19101I. The rebuilt BoostDeck and ShiftDeck pass the reference ABI comparison. **Tested and working** for BoostDeck in [#76](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/76), which also reports gateway errors in Bootmod3 Suite and BEAMer. |
@@ -44,11 +45,10 @@ The installer checks firmware and framework pairs against [installer-profiles.js
 | Firmware | Evidence needed |
 | --- | --- |
 | J16383I | The 1280 × 480 request in [#86](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/86) supplies a version and display. A submitted Trio capture contains both hashes. The pair is distinct from the existing installer profiles and is recorded as capture-only. |
-| K17052I | [#34](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/34) supplies the screen version. Both framework hashes and the active display size are still needed. |
 | V20153J | [#25](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/25) reports that the ABI resolves. Both exact framework hashes and display size are still needed. V20153I is a different profile. |
-| W202xxI | [#97](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/97) reports a working installation and a BEAMer module issue. The complete firmware code, both framework hashes, and display size are still needed. |
+| W202xxI | [#97](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/97) reports a working installation and a BEAMer module issue. The exact W20204I submission is approved. Other W202xxI reports need their exact firmware code, both framework hashes, and display size. |
 
-O18184I passed the static ABI comparison and has its own framework hashes. Use the [Trio Compatibility Collector](../tools/trio-collector/Quick%20Start.md) for the version, both framework hashes, and the active display size.
+O18184I has a distinct framework pair. The supplied Trio capture matches it, and the owner reported a successful installation with native Android Auto removed. [Issue #115](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/115) Use the [Trio Compatibility Collector](../tools/trio-collector/Quick%20Start.md) for the version, both framework hashes, and the active display size.
 
 The 320d handoff matches the existing N18032I firmware profile. ShiftDeck RPM and BoostDeck transmission temperature were observed working. Dynamic diesel pressure and intake requests remain unshipped because the draft redefines a shared ECU diagnostic slot and independent validation is incomplete. Firmware compatibility does not determine which engine signals or tuning controls a vehicle supports.
 
@@ -113,8 +113,11 @@ branches still require 00 06. RPM and zero-speed checks also have to pass.
 | Y24073J | Both submissions match the existing framework pair. One capture reports 1440 × 540. [Issue #105](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/105) | Existing profile |
 | Y22292I | The submitted framework bytes match both report digests and the existing profile. [Issue #59](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/59) | Existing profile |
 | J16383I | One submitted capture reports a distinct pair. [Issue #86](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/86) | Capture-only |
-| O18184I | Both captures agree on a distinct pair. One reports 1440 × 540 over split-node SSH. | Capture-only |
+| O18184I | The submitted 1280 × 480 split-node capture matches the distinct pair. The owner reported a working installation. [Issue #115](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/115) | Installer profile |
+| T21424I | Both reported fingerprints match Y21432J. [Issue #129](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/129) | Installer profile |
 | W20204I | Both frameworks match V20153I. trulex submitted the installer profile. mohamaddude1 reported BoostDeck, ShiftDeck and Engine Fault Codes working on an F90. [PR #112](https://github.com/inotbarnacle/ID6_apps_prerelease/pull/112) · [Issue #104](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/104) | Exact-hash alias |
+
+On split-node units, the installer reads the firmware version from Jacinto first, as Trio Collector does. It checks the actual HMI framework files on OMAP and requires both hashes to match. The supplied Y22292I capture matches the existing profile at 1280 × 480.
 
 The installer recognises capture-only pairs and reports that they require a native ABI check and parked runtime validation before staging.
 

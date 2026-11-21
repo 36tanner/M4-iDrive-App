@@ -9,7 +9,7 @@ If your version is unsupported, enable temporary SSH with Bavarian SSH Client fi
 
 ## Desktop installer (beta)
 
-[Download the macOS or Windows installer](https://github.com/inotbarnacle/ID6_apps_prerelease/releases/tag/installer-v0.7.5). Follow the [setup, install, and uninstall guide](Installer.md). Temporary SSH must be enabled before opening the installer.
+[Download the macOS or Windows installer](https://github.com/inotbarnacle/ID6_apps_prerelease/releases/tag/installer-v0.7.6). Follow the [setup, install, and uninstall guide](Installer.md). Temporary SSH must be enabled before opening the installer.
 
 [NBTApps](https://github.com/tom-pryor/nbtapps) also distributes these apps through its [community catalogue](https://github.com/tom-pryor/nbtapps-packages). The v0.7.5 release includes the package handoff for the catalogue maintainer. Check your firmware against the [compatibility matrix](source/docs/COMPATIBILITY.md) before installing. HUD Gauges and xDrive Control are experimental. **HUD Gauges are unavailable whenever native NBT-AAD (Android Auto) is installed**, even while Android Auto is stopped.
 
@@ -21,9 +21,9 @@ The porting workflow can be used to evaluate any iDrive 6 version. Prebuilt pack
 
 ## Tell your agent what to install
 
-Choose **MHD+ Suite** or **Bootmod3 Suite**. [Download the dashboard package](packages/dashboard.zip). Also say whether to install **xDrive Control** and **HUD Gauges**. Both are experimental. Bootmod3 Suite is in beta.
+Choose **MHD+ Suite**, **Bootmod3 Suite**, or **MG Flasher**. [Download the dashboard package](packages/dashboard.zip). Also say whether to install **xDrive Control** and **HUD Gauges**. Both are experimental.
 
-> My car is parked, iDrive is awake, and this computer is connected over wired ENET. Follow the AgentReadMe to install BoostDeck, ShiftDeck, and Engine Fault Codes. My tuning menu choice is **[MHD+ Suite / Bootmod3 Suite]**. My xDrive Control (experimental) choice is **[yes / no]**. My HUD Gauges choice is **[yes / no]**. Verify firmware, framework hashes, and display resolution before uploading. Ask me when temporary SSH or a parked restart is needed.
+> My car is parked, iDrive is awake, and this computer is connected over wired ENET. Follow the AgentReadMe to install BoostDeck, ShiftDeck, and Engine Fault Codes. My tuning menu choice is **[MHD+ Suite / Bootmod3 Suite / MG Flasher]**. My xDrive Control (experimental) choice is **[yes / no]**. My HUD Gauges choice is **[yes / no]**. Verify firmware, framework hashes, and display resolution before uploading. Ask me when temporary SSH or a parked restart is needed.
 
 [Quick Start](Quick%20Start.md) · [Uninstall](AgentReadMe.md#uninstall) · [Change notes](CHANGELOG.md) · [Native source](source/)
 
@@ -35,7 +35,9 @@ Choose **MHD+ Suite** or **Bootmod3 Suite**. [Download the dashboard package](pa
 - **LaunchDeck** times 0–60 and 60–130 mph or 0–100 and 100–200 km/h. The menu shows a green **Ready** check, **Measuring** during a run, and the last three results for each mode. Display resolution is 0.01 s, with measurement precision limited by OBD speed sampling. [LaunchDeck package](packages/launchdeck.zip)
 - **ShiftDeck** displays live speed, an RPM bar, and shift lights with a selectable RPM threshold. Press **OPTIONS** to switch between mph and km/h. This update includes performance improvements.
 - **MHD+ Suite** offers four map slots and puts **Exhaust Flap** and **Max Cooling** under **Options**. The main screen shows the last map and Max Cooling settings accepted by the DME during the current app session.
-- **Bootmod3 Suite** is a new beta control menu for compatible CustomROM tunes. It offers four map slots, exhaust flap control, Active Sound, and burble presets.
+- **HybridDeck** displays plug-in hybrid battery charge, health, power, voltage, current, and temperatures. [HybridDeck package](packages/hybriddeck.zip)
+- **MG Flasher** offers map slots, burble slots, and Max Cooling. [MG Flasher package](packages/mgflasher.zip)
+- **Bootmod3 Suite** is a control menu for compatible CustomROM tunes. It offers four map slots, exhaust flap control, Active Sound, and burble presets.
 - **xDrive Control (experimental)** temporarily selects rear-wheel drive on supported DSC versions. Mode changes require confirmed Park and zero speed. The F-series DSC_25 (0F1860) with LMV 0F1480 requires the engine running. The supported G-series DSCs require the engine off. See the [compatibility notes](source/docs/COMPATIBILITY.md#xdrive-control-experimental).
 - **Engine Fault Codes** reads engine/DME fault codes and shows descriptions when available. After a confirmed clear, it rereads the fault memory and reports codes that remain. Park with ignition on and the engine off before confirming a clear.
 - **Road Jet**. A simple game that makes a jet move based on throttle input and steering angle. [Road Jet package](packages/road-jet.zip)
@@ -44,10 +46,23 @@ Choose **MHD+ Suite** or **Bootmod3 Suite**. [Download the dashboard package](pa
 
 ## Contributors and credits
 
+- **MG Flasher** branding in the tuning menu comes from [MG Flasher](https://mgflasher.com/).
 - **Ivan Hryhoriev** contributed the original WarmDeck prototype and warm-up dashboard design.
 - **CarPlay Advanced HUD** was created by [@st1ng](https://github.com/st1ng). The optional installer uses st1ng’s original release. [CarPlay Advanced source and license](https://github.com/st1ng/nbtevo-carplay-advanced)
 
 ## iDrive menus
+
+### New app previews
+
+These previews use the app layouts and sample readings.
+
+<table>
+  <tr>
+    <td><img src="images/MG-Flasher-menu-preview.png" alt="MG Flasher map slot selection" width="300"><br>MG Flasher</td>
+    <td><img src="images/HybridDeck-preview.png" alt="HybridDeck showing high-voltage battery health and live readings" width="300"><br>HybridDeck</td>
+    <td><img src="images/BoostDeck-large-dials-preview.png" alt="BoostDeck with the larger circular gauges" width="300"><br>BoostDeck circular gauges</td>
+  </tr>
+</table>
 
 ### General menus
 

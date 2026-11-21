@@ -15,6 +15,8 @@ from PIL import Image
 GROUPS = {
     "dashboard": ("BoostDeck", "ShiftDeck", "EngineCodes", "MhdMaps"),
     "bootmod3": ("Bootmod3Suite",),
+    "mgflasher": ("MgFlasher",),
+    "hybriddeck": ("HybridDeck",),
     "xdrive": ("XDriveControl",),
     "beamer": ("BEAMer",),
     "road-jet": ("RoadJet",),
@@ -22,7 +24,8 @@ GROUPS = {
     "hud-gauges": ("HudTest",),
     "warmdeck": ("WarmDeck",),
 }
-COMPACT = {"BoostDeck", "ShiftDeck", "EngineCodes", "MhdMaps", "Bootmod3Suite", "LaunchDeck", "HudTest", "WarmDeck"}
+COMPACT = {"BoostDeck", "ShiftDeck", "EngineCodes", "MhdMaps", "Bootmod3Suite", "MgFlasher",
+           "LaunchDeck", "HudTest", "WarmDeck", "HybridDeck"}
 GEOMETRY = re.compile(rb'(<property id=")(9|10|20|21)(" value=")(-?\d+)(")')
 
 

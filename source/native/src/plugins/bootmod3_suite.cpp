@@ -15,6 +15,8 @@ class Bootmod3SuiteApp : public bmw::PluginApp {
     int pipe_;
     unsigned generation_;
     unsigned resultModel_;
+    unsigned pendingMap_;
+    bool readingMap_;
     char result_[128];
     size_t used_;
 
@@ -28,6 +30,8 @@ class Bootmod3SuiteApp : public bmw::PluginApp {
     }
     void stopWorker() {
         ++generation_;
+        pendingMap_=0;
+        readingMap_=false;
         if (pipe_>=0) { close(pipe_); pipe_=-1; }
         reap();
         if (child_>0) kill(child_,SIGTERM);
@@ -40,16 +44,19 @@ class Bootmod3SuiteApp : public bmw::PluginApp {
     }
     void postPoll() { postStatusEvent(kMapPoll,100u); }
 
-    template <unsigned Value, unsigned Function> bool selectMap(const bmw::Parcel&) {
+    bool startRequest(unsigned value, unsigned function) {
         reap();
-        if (pipe_>=0 || child_>0) return true;
+        if (pipe_>=0 || child_>0) {
+            if (function==1 && readingMap_) pendingMap_=value;
+            return true;
+        }
         ++generation_; // a prior result's dismissal cannot erase this request
-        resultModel_=Function==5 ? 50u : 49u+Function;
+        resultModel_=function==5 ? 50u : 49u+function;
         int channel[2];
         if (pipe(channel)<0) { status("Could not start map request"); return true; }
-        const char argument[]={static_cast<char>('0'+Value),0};
-        const char* mode=Function==1 ? "--map" : Function==2 ? "--flap" : Function==3 ? "--sound" :
-                         Function==4 ? "--burbles" : "--current-map";
+        const char argument[]={static_cast<char>('0'+value),0};
+        const char* mode=function==1 ? "--map" : function==2 ? "--flap" : function==3 ? "--sound" :
+                         function==4 ? "--burbles" : "--current-map";
         const DiagnosticGateway gateway("/var/opt/hmi/data/ID5/Plugins/Bootmod3Suite/gateway-ip.txt");
         const char* worker=kMapWorker;
         const char* args[]={worker,"--host",gateway.host(),mode,argument,0};
@@ -64,18 +71,26 @@ class Bootmod3SuiteApp : public bmw::PluginApp {
         }
         pipe_=channel[0];
         used_=0;
+        readingMap_=function==5;
         char message[32];
-        if (Function==1 && strcmp(mode,"--status")) snprintf(message,sizeof message,"Requesting map %u...",Value);
-        else if (Function==5) snprintf(message,sizeof message,"Reading current map...");
+        if (function==1) snprintf(message,sizeof message,"Requesting map %u...",value);
+        else if (function==5) snprintf(message,sizeof message,"Reading current map...");
         else snprintf(message,sizeof message,"Sending request...");
         status(message);
         postPoll();
         return true;
     }
 
+    template <unsigned Value, unsigned Function> bool selectMap(const bmw::Parcel&) {
+        return startRequest(Value,Function);
+    }
+
     bool readMapOnEntry(const bmw::Parcel& event) {
         bool visible;
-        if (event.readBool(visible) && visible) return selectMap<0,5>(event);
+        if (event.readBool(visible)) {
+            if (visible) return startRequest(0,5);
+            pendingMap_=0;
+        }
         return true;
     }
 
@@ -85,6 +100,8 @@ public:
         : PluginApp(d,name,maj,min,version,cfg,res),child_(-1),pipe_(-1),
           generation_(0),
           resultModel_(50u),
+          pendingMap_(0),
+          readingMap_(false),
           used_(0)
            {}
     virtual ~Bootmod3SuiteApp() { stopWorker(); }
@@ -147,6 +164,14 @@ public:
         }
         reap();
         if (pipe_>=0 || child_>0) postPoll();
+        else {
+            readingMap_=false;
+            if (pendingMap_) {
+                const unsigned value=pendingMap_;
+                pendingMap_=0;
+                return startRequest(value,1);
+            }
+        }
         return true;
     }
 };

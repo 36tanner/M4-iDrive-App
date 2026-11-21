@@ -1,5 +1,13 @@
 # Change notes
 
+## v0.7.6
+
+- Adds MG Flasher live controls and HybridDeck for plug-in hybrid telemetry, including battery health where reported.
+- BoostDeck gets larger circular gauges, radio-button settings, gasoline rail-pressure fallback, and improved handling of unavailable signals and an occupied HUD sharing port.
+- Bootmod3 detects supported ROMs automatically. Exhaust flap and Active Sound work independently of the ROM lookup.
+- The installer qualifies firmware variants by two matching framework hashes and reads firmware from Jacinto first on split-node head units.
+- Engine Fault Codes gains a wider code column and a read-only diagnostic trace.
+
 - **v0.7.5** adds T24081I as an exact-hash alias of Y24073J. The Windows and macOS installers offer opt-in [CarPlay Advanced HUD by @st1ng](https://github.com/st1ng/nbtevo-carplay-advanced).
 
 - **v0.7.5-rc9** labels the ethanol gauge tile `E%`.

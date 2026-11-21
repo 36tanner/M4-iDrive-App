@@ -33,6 +33,8 @@ worker src/workers/exhaust_flap_worker.c out/core.o -o out/exhaust-flap-worker-q
 worker src/workers/shift_deck_worker.c out/core.o -o out/shift-deck-qnx
 worker src/workers/engine_codes_worker.c out/core.o -o out/engine-codes-qnx
 worker src/workers/bootmod3_suite_worker.c out/core.o -o out/bootmod3-qnx
+worker src/workers/mg_flasher_worker.c out/core.o -o out/mgflasher-qnx
+worker src/workers/hybrid_deck_worker.c out/core.o -o out/hybriddeck-collector-qnx
 worker src/workers/xdrive_control_worker.c out/core.o -o out/xdrive-control-qnx
 worker src/workers/beamer_worker.c out/core.o -o out/beamer-qnx
 worker src/workers/road_jet_worker.c out/core.o -o out/road-jet-qnx
@@ -76,6 +78,13 @@ cxx -Isrc/common -Isrc/ipc -Isdk -O2 -fno-exceptions -fPIC -shared src/plugins/l
 cxx -Isrc/common -Isrc/ipc -Isdk -O2 -fno-exceptions -fPIC -shared src/plugins/warm_deck.cpp out/core.o \
     "$frameworks/libAppFramework.A.so" "$frameworks/libCoreFramework.A.so" -Lout -lm -lsocket \
     -Wl,--allow-shlib-undefined -Wl,-soname,libWarmDeck.so -o out/libWarmDeck.so
+
+cxx -Isrc/common -Isrc/ipc -Isdk -O2 -fno-exceptions -fPIC -shared src/plugins/mg_flasher.cpp \
+    "$frameworks/libAppFramework.A.so" "$frameworks/libCoreFramework.A.so" -Lout -lsocket \
+    -Wl,--allow-shlib-undefined -Wl,-soname,libMgFlasher.so -o out/libMgFlasher.so
+cxx -Isrc/common -Isrc/ipc -Isdk -O2 -fno-exceptions -fPIC -shared src/plugins/hybrid_deck.cpp out/core.o \
+    "$frameworks/libAppFramework.A.so" "$frameworks/libCoreFramework.A.so" -Lout -lsocket \
+    -Wl,--allow-shlib-undefined -Wl,-soname,libHybridDeck.so -o out/libHybridDeck.so
 
 # Optional HUD build against the licensed NBT-AAD milestone-7 source.
 if test -n "${NBTAAD_SOURCE:-}"; then
