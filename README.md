@@ -44,7 +44,7 @@ Choose **MHD+ Suite** or **Bootmod3 Suite**. [Download the dashboard package](pa
 
 ## Contributors and credits
 
-- **WarmDeck** was inspired by the original WarmDeck prototype and warm-up dashboard design shared by its community contributor.
+- **Ivan Hryhoriev** contributed the original WarmDeck prototype and warm-up dashboard design.
 - **CarPlay Advanced HUD** was created by [@st1ng](https://github.com/st1ng). The optional installer uses st1ng’s original release. [CarPlay Advanced source and license](https://github.com/st1ng/nbtevo-carplay-advanced)
 
 ## iDrive menus
