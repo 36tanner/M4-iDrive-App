@@ -1,5 +1,7 @@
 # Change notes
 
+- **v0.7.5** adds T24081I as an exact-hash alias of Y24073J. The Windows and macOS installers offer opt-in [CarPlay Advanced HUD by @st1ng](https://github.com/st1ng/nbtevo-carplay-advanced).
+
 - **v0.7.5-rc9** labels the ethanol gauge tile `E%`.
 
 - **v0.7.5-rc8** shortens BoostDeck tile captions to fit the bars and dials, with abbreviated captions for the narrow gauge.

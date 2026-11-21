@@ -9,9 +9,11 @@ If your version is unsupported, enable temporary SSH with Bavarian SSH Client fi
 
 ## Desktop installer (beta)
 
-[Download the macOS or Windows installer](https://github.com/inotbarnacle/ID6_apps_prerelease/releases/tag/installer-v0.7.4). Follow the [setup, install, and uninstall guide](Installer.md). Temporary SSH must be enabled before opening the installer.
+[Download the macOS or Windows installer](https://github.com/inotbarnacle/ID6_apps_prerelease/releases/tag/installer-v0.7.5). Follow the [setup, install, and uninstall guide](Installer.md). Temporary SSH must be enabled before opening the installer.
 
-[NBTApps](https://github.com/tom-pryor/nbtapps) also distributes these apps through its [community catalogue](https://github.com/tom-pryor/nbtapps-packages). The v0.7.4 release includes the package handoff for the catalogue maintainer. Check your firmware against the [compatibility matrix](source/docs/COMPATIBILITY.md) before installing. HUD Gauges and xDrive Control are experimental.
+[NBTApps](https://github.com/tom-pryor/nbtapps) also distributes these apps through its [community catalogue](https://github.com/tom-pryor/nbtapps-packages). The v0.7.5 release includes the package handoff for the catalogue maintainer. Check your firmware against the [compatibility matrix](source/docs/COMPATIBILITY.md) before installing. HUD Gauges and xDrive Control are experimental. **HUD Gauges are unavailable whenever native NBT-AAD (Android Auto) is installed**, even while Android Auto is stopped.
+
+The installer also offers [@st1ng’s CarPlay Advanced](https://github.com/st1ng/nbtevo-carplay-advanced) in HUD-only mode for turn-by-turn directions. It downloads the original release and runs its installer as a separate operation.
 
 ## iDrive 6 compatibility
 
@@ -48,6 +50,10 @@ Choose **MHD+ Suite** or **Bootmod3 Suite**. [Download the dashboard package](pa
   <tr>
     <td><img src="images/01-boostdeck.png" alt="BoostDeck on iDrive" width="300"><br>BoostDeck</td>
     <td><img src="images/02-shiftdeck.png" alt="ShiftDeck on iDrive" width="300"><br>ShiftDeck</td>
+  </tr>
+  <tr>
+    <td><img src="images/10-launchdeck.png" alt="LaunchDeck ready for a 0–60 mph run" width="300"><br>LaunchDeck</td>
+    <td><img src="images/11-warmdeck.png" alt="WarmDeck showing the three temperature targets reached" width="300"><br>WarmDeck</td>
   </tr>
   <tr>
     <td><img src="images/06-engine-fault-codes.png" alt="Engine Fault Codes on iDrive" width="300"><br>Engine Fault Codes</td>

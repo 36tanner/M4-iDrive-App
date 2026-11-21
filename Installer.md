@@ -1,6 +1,6 @@
 # ID6Apps Desktop Installer (beta)
 
-Download the [installer release](https://github.com/inotbarnacle/ID6_apps_prerelease/releases/tag/installer-v0.7.4). The macOS app supports Apple silicon and Intel Macs. On Windows, open the x64 folder for Intel or AMD PCs, or the ARM64 folder for Windows on ARM.
+Download the [installer release](https://github.com/inotbarnacle/ID6_apps_prerelease/releases/tag/installer-v0.7.5). The macOS app supports Apple silicon and Intel Macs. On Windows, open the x64 folder for Intel or AMD PCs, or the ARM64 folder for Windows on ARM.
 
 ## Enable temporary SSH first
 
@@ -17,6 +17,16 @@ Download the [installer release](https://github.com/inotbarnacle/ID6_apps_prerel
 5. Choose **Install selected menus**. Wait for verification and record the backup path. Restart iDrive while parked, then open the menus under **My Vehicle**.
 
 The installer uses the same RHMI layout at 1280 × 480, 1440 × 540 and 1920 × 720. iDrive scales the shared 1440 × 540 logical canvas to the panel. The 800 × 480 and 960 × 480 panels have less logical content width, so the installer stages compact artwork for those panels. HUD menu sizing is separate from the windshield overlay. [Andreas Boehm’s layout measurements](https://github.com/AndreasBoehm/idrive6-layout-preview) · [Issue #113](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/113)
+
+## Optional CarPlay Advanced HUD
+
+1. Use wired ENET, a parked car with working factory CarPlay and internet access on the computer.
+2. Choose **Operation → CarPlay Advanced HUD → Preview CarPlay installation**. Read the reported cluster type, boot-hook changes and backup plan.
+3. Choose **Install CarPlay HUD**. Restart iDrive while parked to open **Media/Radio → CarPlay Advanced Settings**. Reconnect the iPhone to test directions.
+
+The installer retrieves and verifies [@st1ng’s CarPlay Advanced v1.3.0](https://github.com/st1ng/nbtevo-carplay-advanced/releases/tag/v1.3.0) and invokes its HUD-only installation procedure. The boot script and existing installation are backed up on the head unit under `/var/opt/carplay-advanced-backups`. Use the [upstream uninstall instructions](https://github.com/st1ng/nbtevo-carplay-advanced#install) to remove its boot hook and files. Menu visibility requires factory app coding. CarPlay Advanced and NBT-AAD use shared cluster and HUD channels, so verify directions with one projection app active at a time.
+
+**ID6 HUD Gauges are unavailable whenever native NBT-AAD (Android Auto) is installed**, including when its daemon is stopped. The overlay also stays off when it detects the CarPlay Advanced HUD hook.
 
 ## Uninstall
 

@@ -109,6 +109,7 @@ branches still require 00 06. RPM and zero-speed checks also have to pass.
 
 | Firmware | Evidence | Installer status |
 | --- | --- | --- |
+| T24081I | Both framework hashes match Y24073J. The submitted capture reports 1280 × 480 and split-node SSH. The current BoostDeck and ShiftDeck passed the static framework comparison. | Exact-hash alias |
 | Y24073J | Both submissions match the existing framework pair. One capture reports 1440 × 540. [Issue #105](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/105) | Existing profile |
 | Y22292I | The submitted framework bytes match both report digests and the existing profile. [Issue #59](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/59) | Existing profile |
 | J16383I | One submitted capture reports a distinct pair. [Issue #86](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/86) | Capture-only |
