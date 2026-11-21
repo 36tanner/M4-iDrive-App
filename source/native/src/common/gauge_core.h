@@ -6,7 +6,7 @@
 extern "C" {
 #endif
 enum {
-#define SIGNAL(id, name, lo, hi, unit) BD_##id,
+#define SIGNAL(id, name, lo, hi, unit, wide, narrow) BD_##id,
 #include "boost_signals.def"
 #undef SIGNAL
     BD_COUNT

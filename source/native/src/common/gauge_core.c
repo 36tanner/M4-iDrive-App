@@ -183,7 +183,7 @@ int bd_is_fresh(const bd_frame *f, unsigned i, uint64_t elapsed) {
 enum signal_unit { NUMBER, PRESSURE_PSI, PRESSURE_BAR, PRESSURE_KPA, DEGREES,
                    TEMPERATURE, PERCENT, VOLTS, RPM, SPEED, MASS_FLOW, FUEL_FLOW };
 static const struct { const char *name; double lo, hi; enum signal_unit unit; } signals[] = {
-#define SIGNAL(id, name, lo, hi, unit) {name, lo, hi, unit},
+#define SIGNAL(id, name, lo, hi, unit, wide, narrow) {name, lo, hi, unit},
 #include "boost_signals.def"
 #undef SIGNAL
 };

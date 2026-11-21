@@ -1,5 +1,7 @@
 # Change notes
 
+- **v0.7.5-rc8** shortens BoostDeck tile captions to fit the bars and dials, with abbreviated captions for the narrow gauge.
+
 - **v0.7.5-rc7** LaunchDeck uses a dedicated telemetry port so its menu can coexist with BoostDeck.
 
 - **v0.7.5-rc6** adopts the standalone QNX worker and RHMI plugin layout from [Andreas Boehm’s PR #109](https://github.com/inotbarnacle/ID6_apps_prerelease/pull/109).

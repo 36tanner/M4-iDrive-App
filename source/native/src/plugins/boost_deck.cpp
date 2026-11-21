@@ -37,6 +37,11 @@ const char kCollector[] = "/var/opt/hmi/data/ID5/Plugins/BoostDeck/boostdeck-col
 const char kPreferences[] = "/var/opt/hmi/data/ID5/BoostDeck.prefs";
 const unsigned kBarCount = 9;
 const unsigned kVerticalSlot = 8;
+const char* const kGaugeCaptions[][2] = {
+#define SIGNAL(id, name, lo, hi, unit, wide, narrow) {wide, narrow},
+#include "boost_signals.def"
+#undef SIGNAL
+};
 const unsigned kVerticalFirst = 56100;
 const unsigned kVerticalSteps = 20;
 const unsigned kTransparent = 57000;
@@ -275,7 +280,7 @@ bool BoostDeck::onInit() {
         addHandler(510u+i,11u,action);
     }
     static const Handler changes[] = {
-#define SIGNAL(id, name, lo, hi, unit) &Action::execImpl<BoostDeck,&BoostDeck::changeGauge<BD_##id> >,
+#define SIGNAL(id, name, lo, hi, unit, wide, narrow) &Action::execImpl<BoostDeck,&BoostDeck::changeGauge<BD_##id> >,
 #include "boost_signals.def"
 #undef SIGNAL
     };
@@ -470,8 +475,7 @@ void BoostDeck::updateAssignments() {
         snprintf(name,sizeof name,"Gauge %u: %s",i+1,bd_name(signals_[diesel_][i]));
         updateModel(340u+i,bmw::BasicString<char>(name));
         const unsigned signal=signals_[diesel_][i];
-        const char* caption=signal==BD_ETHANOL && i==kVerticalSlot ? "Active E" :
-                            signal==BD_TRANS ? "Transmission" : bd_name(signal);
+        const char* caption=kGaugeCaptions[signal][i==kVerticalSlot];
         updateModel(370u+i,bmw::BasicString<char>(caption));
     }
     updateModel(360u,bmw::BasicString<char>(diesel_ ? "Engine profile: Diesel" : "Engine profile: Gasoline"));
