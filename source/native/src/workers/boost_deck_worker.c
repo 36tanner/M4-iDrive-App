@@ -296,6 +296,15 @@ int main(int argc, char **argv) {
                     v = (v-ambient) * .145037738; /* kPa absolute - measured ambient -> gauge psi */
                 }
                 if (i == 2) v *= 14.7; /* measured lambda -> gasoline-equivalent AFR */
+#ifdef S55_ABSOLUTE_OIL
+                /* The S55 DME reports 586F as absolute pressure: an F82 M4 read 1.03 bar with the engine
+                 * off and 3.35 bar at idle, ambient 1.006 bar. Show gauge pressure, never below zero. */
+                if (dids[i] == 0x586f) {
+                    if (!have_ambient || bd_mono_ms()-ambient_time > 1800) continue;
+                    v -= ambient / 100.0;
+                    if (v < 0) v = 0;
+                }
+#endif
                 did_values |= 1u << (i-1);
                 f.value[i-1]=v; observed[i-1]=bd_mono_ms(); f.valid |= 1u << (i-1);
                 /* A tunnel read is slow, so each new value goes out at once. */
