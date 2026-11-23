@@ -701,6 +701,15 @@ int main(int argc, char **argv) {
                     v = (v-ambient) * .145037738; /* kPa absolute - measured ambient -> gauge psi */
                 }
                 if (i == 2) v *= 14.7; /* measured lambda -> gasoline-equivalent AFR */
+#ifdef M4_S55
+                /* The S55's 586F is absolute: this car read 1.03 bar with the engine off and 3.35 bar at
+                 * idle, with ambient at 1.006 bar. Show gauge pressure, never below zero. */
+                if (dids[i] == 0x586f) {
+                    if (!have_ambient || bd_mono_ms()-ambient_time > 1800) continue;
+                    v -= ambient / 100.0;
+                    if (v < 0) v = 0;
+                }
+#endif
                 f.value[i-1]=v; observed[i-1]=bd_mono_ms(); f.valid |= 1u << (i-1);
                 /* A tunnel read is slow, so each new value goes out at once. */
                 if (diag_link_on_most(&link) && !send_frame(sock,&dest,&f,observed)) { perror("send frame"); diag_running=0; }

@@ -43,7 +43,7 @@ def exact(conn, n):
     return out
 
 
-class M4CollectorTest(unittest.TestCase):
+class Harness(unittest.TestCase):
     def run_collector(self, cycles, extra=()):
         udp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         udp.bind(("127.0.0.1", 0))
@@ -106,6 +106,7 @@ class M4CollectorTest(unittest.TestCase):
             udp.close()
             server.close()
 
+class M4CollectorTest(Harness):
     def test_s55_profile_extras_and_logging(self):
         with tempfile.TemporaryDirectory() as tmp:
             flag = Path(tmp) / "logging-enabled"
@@ -141,7 +142,7 @@ class M4CollectorTest(unittest.TestCase):
         self.assertAlmostEqual(values[3], 24)
         self.assertAlmostEqual(values[4], 97.4)       # oil temperature in the transmission slot
         self.assertAlmostEqual(values[5], 40)         # rail pressure from PID 23
-        self.assertAlmostEqual(values[6], 1.003)
+        self.assertAlmostEqual(values[6], 0)          # 1.003 bar absolute minus 1.032 ambient, floored
         self.assertAlmostEqual(values[7], 88.5)       # one-byte coolant
 
         x = extras[-1]
@@ -169,6 +170,28 @@ class M4CollectorTest(unittest.TestCase):
             logs = Path(tmp) / "logs"
             self.run_collector(20, ("--log-dir", str(logs), "--log-flag", str(Path(tmp) / "absent")))
             self.assertFalse(logs.exists())
+
+
+class M4CarCaptureTest(Harness):
+    """Replies recorded from this F82 M4 at idle on 2026-11-23 (probe_signals.py, read only)."""
+
+    def test_idle_capture(self):
+        idle = {"224201": "64a1", "224205": "3243", "225889": "0fda", "224A49": "ffdf", "22580F": "60",
+                "224408": "00eb", "22586F": "0d19", "224300": "6b", "224AB0": "64a0", "224A2E": "17ea",
+                "22402B": "00d27e2c01b5" + "00" * 22}
+        saved = dict(DME)
+        DME.update({k: bytes.fromhex(v) for k, v in idle.items()})
+        try:
+            packets, _, _ = self.run_collector(60)
+        finally:
+            DME.clear()
+            DME.update(saved)
+        g = [p for p in packets if p[0] == "NBG4"][-1]
+        values = [float(g[5 + 2 * i]) for i in range(8)]
+        self.assertAlmostEqual(values[1], 0x0FDA * 16 / 65535 * 14.7, places=3)   # AFR 14.56
+        self.assertAlmostEqual(values[4], 23.5)                                     # oil temperature
+        self.assertAlmostEqual(values[6], 3.353 - 0x64A1 / 25600, places=3)         # oil gauge, 2.35 bar
+        self.assertAlmostEqual(values[7], 0x6B * .75 - 48)                          # coolant 32.25
 
 
 class M4ShiftDeckTest(unittest.TestCase):

@@ -49,6 +49,7 @@ def main():
     parser.add_argument("--dashboard", type=Path, required=True, help="packages/dashboard.zip")
     parser.add_argument("--native", type=Path, help="build.sh output directory from the M4 build")
     parser.add_argument("--resources-only", action="store_true", help="screens only, for review")
+    parser.add_argument("--gateway", help="diagnostic gateway IPv4 written to each app's gateway-ip.txt")
     parser.add_argument("--out", type=Path, required=True)
     args = parser.parse_args()
     if not args.native and not args.resources_only:
@@ -73,6 +74,11 @@ def main():
                     if not source.is_file():
                         raise SystemExit(f"Missing native output: {source}")
                     (build / app / name).write_bytes(source.read_bytes())
+        if args.gateway:
+            from ipaddress import IPv4Address
+            address = str(IPv4Address(args.gateway))
+            for app in ("BoostDeck", "ShiftDeck", "EngineCodes"):
+                (build / app / "gateway-ip.txt").write_text(address + "\n")
         lines = []
         for f in sorted(p for p in build.rglob("*") if p.is_file()):
             lines.append(f"{hashlib.sha256(f.read_bytes()).hexdigest()}  {f.relative_to(build).as_posix()}")
