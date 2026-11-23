@@ -18,6 +18,8 @@
 #include "diag_link.h"
 #include "diagnostic_lease.h"
 #include "gauge_core.h"
+#include "gauge_coexistence.h"
+#include "drive_frame.h"
 #include "fake_dme.h"
 #include "fake_dsi.h"
 
@@ -30,6 +32,16 @@ static const unsigned char READ_4201[] = {0x22,0x42,0x01}, PFX_4201[] = {0x62,0x
 static const unsigned char REPLY_4201[] = {0x62,0x42,0x01,0x63,0xca};
 
 static void sleep_ms(int ms) { poll(0, 0, ms); }
+
+static void test_launch_and_boost_bind_separately(void)
+{
+    int launch = gauge_bind(LAUNCH_DRIVE_PORT);
+    int boost = gauge_bind(BOOST_ACTIVE_PORT);
+    CHECK(launch >= 0);
+    CHECK(boost >= 0);
+    if (launch >= 0) close(launch);
+    if (boost >= 0) close(boost);
+}
 
 static void start(struct diag_link *l, const char *fake, const char *host, unsigned port, int transport,
                   int kind, int session)
@@ -395,7 +407,7 @@ static void test_loop_busy_lease_minus3(void)
     finish(&l);
 }
 
-static void test_oneshot_busy_waits_2s(void)
+static void test_oneshot_busy_waits_3s(void)
 {
     struct diag_link l;
     uint64_t t0, dt;
@@ -406,7 +418,7 @@ static void test_oneshot_busy_waits_2s(void)
     CHECK(diag_link_reserve_oneshot(&l) == 0);
     CHECK(errno == EADDRINUSE);
     dt = bd_mono_ms() - t0;
-    CHECK(dt >= 1950 && dt <= 2300);
+    CHECK(dt >= 2950 && dt <= 3500);
     release_holder(holder);
     CHECK(diag_link_reserve_oneshot(&l) == 1);
     CHECK(reserve_gateway() < 0);    /* held for the run */
@@ -633,6 +645,7 @@ static int run(const char *name, void (*fn)(void))
 int main(void)
 {
     int tests = 0, bad = 0;
+    RUN(test_launch_and_boost_bind_separately);
     RUN(test_hsfz_ok_never_binds);
     RUN(test_loop_switches_after_5);
     RUN(test_oneshot_switches_after_1);
@@ -649,7 +662,7 @@ int main(void)
     RUN(test_failed_open_retries_after_30s);
     RUN(test_oneshot_failed_open_is_final);
     RUN(test_loop_busy_lease_minus3);
-    RUN(test_oneshot_busy_waits_2s);
+    RUN(test_oneshot_busy_waits_3s);
     RUN(test_hsfz_session_lease);
     RUN(test_reply_cap);
     RUN(test_reply_over_cap);
