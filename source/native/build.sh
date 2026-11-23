@@ -20,23 +20,31 @@ ntoarm-gcc -dumpversion
 ntoarm-gcc -dumpmachine
 c() { qcc -V4.4.2,gcc_ntoarmv7le -Wc,-std=c99 -Wall -Wextra -Werror "$@"; }
 cxx() { qcc -V4.4.2,gcc_ntoarmv7le_gpp -lang-c++ -Wc,-std=gnu++98 -Wall -Wextra -Werror "$@"; }
+# M4=1 builds the F82 M4 / S55 variant of BoostDeck and ShiftDeck (docs/M4_S55.md).
+m4_flag=""; m4_obj=""; perf_obj=""
+if test "${M4:-0}" = 1; then
+    m4_flag="-DM4_S55"
+    c -DPERF_LAB -Isrc -O2 -fPIC -c src/m4_signals.c -o out/m4_signals.o
+    c -Isrc -O2 -fPIC -c src/perf_timer.c -o out/perf_timer.o
+    m4_obj="out/m4_signals.o"; perf_obj="out/perf_timer.o"
+fi
 c -DPERF_LAB -Isrc -O2 -fPIC -c src/gauge_core.c -o out/core.o
-cxx -DPERF_LAB -Isrc -Isdk -O2 -fno-strict-aliasing -fno-exceptions -fPIC -shared src/plugin.cpp out/core.o \
+cxx -DPERF_LAB $m4_flag -Isrc -Isdk -O2 -fno-strict-aliasing -fno-exceptions -fPIC -shared src/plugin.cpp out/core.o $m4_obj \
     "$frameworks/libAppFramework.A.so" "$frameworks/libCoreFramework.A.so" -Lout -lm -lsocket \
     -Wl,--allow-shlib-undefined -Wl,-soname,libBoostDeck.so -o out/libBoostDeck.so
 # Every worker carries the HSFZ-then-MOST link. dlopen and pthreads are in QNX libc; the DSI library is
 # opened only at run time, so nothing private is linked.
 worker() { c -Isrc -O2 "$@" src/diag_link.c src/most/*.c -Lout -lm -lsocket; }
-worker -DNATIVE_FAST -DPERF_LAB src/collector.c out/core.o -o out/boostdeck-collector-qnx
+worker -DNATIVE_FAST -DPERF_LAB $m4_flag src/collector.c out/core.o $m4_obj -o out/boostdeck-collector-qnx
 cxx -DPERF_LAB -Isrc -Isdk -O2 -fno-exceptions -fPIC -shared src/mhd_maps.cpp \
     "$frameworks/libAppFramework.A.so" "$frameworks/libCoreFramework.A.so" -Lout \
     -Wl,--allow-shlib-undefined -Wl,-soname,libMhdMaps.so -o out/libMhdMaps.so
-cxx -DPERF_LAB -Isrc -Isdk -O2 -fno-exceptions -fPIC -shared -DNATIVE_SHIFT_SMOOTH src/shift_deck.cpp out/core.o \
+cxx -DPERF_LAB $m4_flag -Isrc -Isdk -O2 -fno-exceptions -fPIC -shared -DNATIVE_SHIFT_SMOOTH src/shift_deck.cpp out/core.o $perf_obj \
     "$frameworks/libAppFramework.A.so" "$frameworks/libCoreFramework.A.so" -Lout -lm -lsocket \
     -Wl,--allow-shlib-undefined -Wl,-soname,libShiftDeck.so -o out/libShiftDeck.so
 worker -DPERF_LAB -DMHD_MAPS_ONLY src/collector.c src/gauge_core.c -o out/mhd-maps-qnx
 worker -DEXHAUST_FLAP_ONLY src/collector.c out/core.o -o out/exhaust-flap-worker-qnx
-worker -DNATIVE_FAST -DSHIFT_DECK_ONLY src/collector.c out/core.o -o out/shift-deck-qnx
+worker -DNATIVE_FAST -DSHIFT_DECK_ONLY $m4_flag src/collector.c out/core.o -o out/shift-deck-qnx
 c -O2 -static fileops.c -o out/gaugedeck-fileops
 c -O2 src/exhaust_flap_launcher.c -lsocket -o out/exhaust-flap-qnx
 cxx -DPERF_LAB -Isrc -Isdk -O2 -fno-strict-aliasing -fno-exceptions -fPIC -shared src/engine_codes.cpp out/core.o \

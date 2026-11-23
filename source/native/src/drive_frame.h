@@ -9,6 +9,9 @@ struct drive_frame {
     uint64_t sampled_ms;
     int32_t rpm;
     int32_t kph;
+#ifdef M4_S55
+    uint64_t kph_ms;   /* when the speed was read; the performance timers need its own time */
+#endif
 };
 
 #endif
