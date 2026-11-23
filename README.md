@@ -1,5 +1,11 @@
 # NBT Evo ID6 apps
 
+> **This fork: F82 M4 / S55 build.** Read-only BoostDeck and ShiftDeck variants for the S55. Oil temp
+> replaces transmission temp, rail pressure comes from OBD, there's a warm-up column, yellow/red gauge
+> colors, a Details screen (health, tires, battery, peaks), on-car logging and performance timers. See
+> [source/docs/M4_S55.md](source/docs/M4_S55.md). It is built from source with `M4=1`; the prebuilt
+> packages below are the stock B58 builds.
+
 Connect your parked car to a computer over wired ENET. Open an AI agent with terminal access on that computer and give it this repository and [AgentReadMe.md](AgentReadMe.md). The agent identifies your head unit, checks compatibility, and installs your chosen apps under **My Vehicle**.
 
 ## Desktop installer (beta)

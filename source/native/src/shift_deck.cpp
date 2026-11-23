@@ -4,6 +4,9 @@
 #include "drive_frame.h"
 #include "gauge_core.h"
 #include "shift_assets.h"
+#ifdef M4_S55
+#include "perf_timer.h"
+#endif
 #include <arpa/inet.h>
 #include <stdio.h>
 #include <sys/socket.h>
@@ -12,6 +15,9 @@
 namespace {
 const unsigned kShiftPoll=0x53484654u;
 const char kShiftWorker[]="/var/opt/hmi/data/ID5/Plugins/ShiftDeck/shift-deck-qnx";
+#ifdef M4_S55
+const unsigned kTimerLines=7u, kTimerFirstModel=80u, kStopDelayMs=600u;
+#endif
 #ifdef NATIVE_SHIFT_SMOOTH
 const unsigned kSweepSteps=128, kSweepBase=56400, kSweepAlert=56529;
 const unsigned kEaseMs=50;
@@ -29,6 +35,73 @@ class ShiftDeck : public bmw::PluginApp {
     unsigned bar_, lights_;
     int rpm_,kph_;
     bool shift_;
+#ifdef M4_S55
+    // Performance timers. The worker keeps running while ShiftDeck or its Timers screen shows.
+    bool main_visible_, timers_visible_;
+    uint64_t hidden_at_, last_speed_ms_;
+    perf_timer timer_;
+    char timer_text_[kTimerLines][128];
+    void timerLine(unsigned line, const char* text) {
+        if (!strcmp(timer_text_[line],text)) return;
+        label(kTimerFirstModel+line,text);
+        snprintf(timer_text_[line],sizeof timer_text_[line],"%s",text);
+    }
+    void formatRun(char* out, size_t size, unsigned run) {
+        char last[48]="--", best[48]="--";
+        if (timer_.have[run]) snprintf(last,sizeof last,"%.2f s",timer_.result[run]);
+        if (timer_.have_best[run]) snprintf(best,sizeof best,"%.2f s",timer_.best[run]);
+        if (run==PT_QUARTER && timer_.have[run]) {
+            const bool metric=
+#ifdef NATIVE_SHIFT_SMOOTH
+                metric_;
+#else
+                false;
+#endif
+            snprintf(last,sizeof last,"%.2f s @ %.0f %s",timer_.result[run],
+                     metric ? timer_.trap_kph : timer_.trap_kph/1.609344,metric ? "km/h" : "mph");
+        }
+        snprintf(out,size,"%s:  %s   (best %s)",perf_name(run,0),last,best);
+    }
+    void drawTimers() {
+        static const char* const states[]={"Stop the car for half a second to arm the standing timers",
+                                           "Armed: timing starts when the car moves",
+                                           "Timing..."};
+        char line[128];
+        timerLine(0,states[perf_state(&timer_)]);
+        for (unsigned run=0;run<PT_COUNT;++run) {
+            formatRun(line,sizeof line,run);
+            timerLine(1+run,line);
+        }
+        timerLine(6,"From OBD speed about 15 times a second, so treat results as estimates");
+    }
+    void visibilityChanged() {
+        const bool any=main_visible_ || timers_visible_;
+        if (any==visible_) return;
+        visible_=any;
+        frame_.sampled_ms=0;
+#ifdef NATIVE_SHIFT_SMOOTH
+        rpm_started_=0;
+#endif
+        if (any) retry_at_=0;
+        else hidden_at_=bd_mono_ms();
+        draw(bd_mono_ms());
+    }
+    bool timersVisibility(const bmw::Parcel& event) {
+        bool show;
+        if (!event.readBool(show) || show==timers_visible_) return true;
+        timers_visible_=show;
+        if (show) memset(timer_text_,0,sizeof timer_text_);
+        visibilityChanged();
+        if (show) drawTimers();
+        return true;
+    }
+    bool resetTimers(const bmw::Parcel&) {
+        perf_reset(&timer_);
+        last_speed_ms_=0;
+        drawTimers();
+        return true;
+    }
+#endif
 #ifdef NATIVE_SHIFT_SMOOTH
     bool metric_;
     double rpm_from_;
@@ -124,6 +197,12 @@ class ShiftDeck : public bmw::PluginApp {
     }
     bool visibility(const bmw::Parcel& event) {
         bool show;
+#ifdef M4_S55
+        if (!event.readBool(show) || show==main_visible_) return true;
+        main_visible_=show;
+        visibilityChanged();
+        return true;
+#endif
         if (!event.readBool(show) || show==visible_) return true;
         visible_=show;
         frame_.sampled_ms=0;
@@ -165,6 +244,12 @@ public:
           visible_(false),target_(kDefaultTarget),retry_at_(0),bar_(0),lights_(0),
           rpm_(-2),kph_(-2),shift_(false) {
         memset(&frame_,0,sizeof frame_);
+#ifdef M4_S55
+        main_visible_=timers_visible_=false;
+        hidden_at_=last_speed_ms_=0;
+        perf_reset(&timer_);
+        memset(timer_text_,0,sizeof timer_text_);
+#endif
 #ifdef NATIVE_SHIFT_SMOOTH
         metric_=false;
         rpm_from_=0;
@@ -198,6 +283,12 @@ public:
         action.m_obj=this;
         action.m_exec=&Action::execImpl<ShiftDeck,&ShiftDeck::visibility>;
         addHandler(100u,11u,action);
+#ifdef M4_S55
+        action.m_exec=&Action::execImpl<ShiftDeck,&ShiftDeck::timersVisibility>;
+        addHandler(102u,11u,action);
+        action.m_exec=&Action::execImpl<ShiftDeck,&ShiftDeck::resetTimers>;
+        addHandler(49u,action);
+#endif
         action.m_exec=&Action::execImpl<ShiftDeck,&ShiftDeck::setTarget<0> >;
         addHandler(41u,action);
         action.m_exec=&Action::execImpl<ShiftDeck,&ShiftDeck::setTarget<1> >;
@@ -228,6 +319,9 @@ public:
         if (generation!=generation_ || socket_<0) return true;
         reap();
         uint64_t now=bd_mono_ms();
+#ifdef M4_S55
+        if (!visible_ && child_>0 && now-hidden_at_>=kStopDelayMs) stopChild();
+#endif
         if (visible_ && child_<=0 && now>=retry_at_) {
             const DiagnosticGateway gateway("/var/opt/hmi/data/ID5/Plugins/" "ShiftDeck" "/gateway-ip.txt");
             const char* args[]={kShiftWorker,"--host",gateway.host(),0};
@@ -250,9 +344,19 @@ public:
                 }
 #endif
                 frame_=next;
+#ifdef M4_S55
+                // Each new speed reading feeds the timers once, at the time it was read.
+                if (next.kph_ms && next.kph_ms>last_speed_ms_ && next.kph_ms<=now) {
+                    perf_sample(&timer_,next.kph_ms,next.kph);
+                    last_speed_ms_=next.kph_ms;
+                }
+#endif
             }
         }
         draw(now);
+#ifdef M4_S55
+        if (timers_visible_) drawTimers();
+#endif
         postPoll();
         return true;
     }

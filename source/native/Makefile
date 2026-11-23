@@ -10,7 +10,8 @@ MOST_HEADERS = src/most/most_link.h src/most/dsi_client.h src/most/most_proto.h 
 FAKE_DSI = tests/fake_dsi.c tests/fake_dme.c tests/fake_dsi.h tests/fake_dme.h
 WORKER = src/collector.c $(CORE_LINK) $(MOST) tests/fake_most_env.c $(FAKE_DSI) $(HEADERS) $(MOST_HEADERS)
 HOST_LINK = $(CC) $(CFLAGS) -pthread -DMOST_HOST -Isrc -Itests
-.PHONY: assets test
+.PHONY: assets test test-m4
+M4 = src/m4_signals.c src/m4_signals.h src/perf_timer.c src/perf_timer.h
 
 assets:
 	$(PYTHON) tools/make_bars.py
@@ -37,6 +38,19 @@ build/bootmod3: $(WORKER) src/controls.c src/bm3_profiles.h | build
 build/exhaust-flap: $(WORKER) | build
 	$(HOST_LINK) -DEXHAUST_FLAP_ONLY $(filter %.c,$^) -lm -o $@
 
+build/boostdeck-collector-m4: $(WORKER) $(M4) | build
+	$(HOST_LINK) -DM4_S55 -DPERF_LAB -DNATIVE_FAST $(filter %.c,$^) -lm -o $@
+
+build/shift-deck-m4: $(WORKER) | build
+	$(HOST_LINK) -DSHIFT_DECK_ONLY -DNATIVE_FAST -DM4_S55 $(filter %.c,$^) -lm -o $@
+
+build/test-m4: tests/test_m4.c $(CORE) $(M4) $(HEADERS) | build
+	$(CC) $(CFLAGS) -DPERF_LAB -Isrc $(filter %.c,$^) -lm -o $@
+
+test-m4: build/test-m4 build/boostdeck-collector-m4 build/shift-deck-m4
+	./build/test-m4
+	$(PYTHON) -B tests/test_m4_collector.py
+
 build/test-core: tests/test_core.c $(CORE) $(HEADERS) | build
 	$(CC) $(CFLAGS) -Isrc $(filter %.c,$^) -lm -o $@
 
@@ -46,7 +60,7 @@ build/test-most: tests/test_most.c $(MOST) $(FAKE_DSI) $(MOST_HEADERS) | build
 build/test-diag-link: tests/test_diag_link.c $(CORE_LINK) $(MOST) tests/fake_most_env.c $(FAKE_DSI) $(HEADERS) $(MOST_HEADERS) | build
 	$(HOST_LINK) $(filter %.c,$^) -lm -o $@
 
-test: build/boostdeck-collector build/shift-deck build/mhd-maps build/engine-codes build/test-core build/test-most build/test-diag-link build/bootmod3 build/exhaust-flap
+test: test-m4 build/boostdeck-collector build/shift-deck build/mhd-maps build/engine-codes build/test-core build/test-most build/test-diag-link build/bootmod3 build/exhaust-flap
 	./build/test-core
 	./build/test-most
 	./build/test-diag-link

@@ -289,6 +289,9 @@ int main(int argc, char **argv) {
     uint64_t speed_due=0;
     int last_speed=-1;
 #endif
+#ifdef M4_S55
+    uint64_t last_speed_ms=0;
+#endif
     for (i=1;i<argc;++i) {
         if (!strcmp(argv[i],"--host") && i+1<argc && !cfg.host) cfg.host=argv[++i];
         else if (!strcmp(argv[i],"--port") && i+1<argc) cfg.port=number(argv[++i],1,65535);
@@ -319,6 +322,9 @@ int main(int argc, char **argv) {
             if (!rc && start>=speed_due) {
                 rc=read_live_pid(&link,0x0d,1,&last_speed);
                 speed_due=start+65;
+#ifdef M4_S55
+                if (!rc) last_speed_ms=bd_mono_ms();
+#endif
             }
             kph=last_speed;
 #else
@@ -329,6 +335,13 @@ int main(int argc, char **argv) {
                 f.sampled_ms=bd_mono_ms();
                 f.rpm=rpm;
                 f.kph=kph;
+#ifdef M4_S55
+#ifdef NATIVE_FAST
+                f.kph_ms=last_speed_ms;
+#else
+                f.kph_ms=f.sampled_ms;
+#endif
+#endif
                 if (sendto(sock,&f,sizeof f,0,(struct sockaddr *)&dest,sizeof dest)!=(ssize_t)sizeof f) break;
                 diag_link_should_yield(&link,f.sampled_ms);
             }
@@ -368,6 +381,139 @@ static int decode_reply(unsigned ecu, unsigned did, const unsigned char *reply, 
     }
     return decoded;
 }
+
+#ifdef M4_S55
+#include "m4_signals.h"
+#include <sys/stat.h>
+#include <sys/statvfs.h>
+#include <time.h>
+
+/* The payload length after 62 <DID>; 0 refused, -1 link lost, -3 this read failed but the link is kept. */
+static int read_payload(struct diag_link *link, unsigned ecu, unsigned did, unsigned char *out, int cap) {
+    unsigned char request[]={0x22,(unsigned char)(did>>8),(unsigned char)did};
+    unsigned char prefix[]={0x62,request[1],request[2]};
+    unsigned char reply[512];
+    unsigned negative;
+    int n=diag_link_request(link,ecu,request,3,prefix,3,reply,
+                            diag_link_on_most(link) ? 64 : sizeof reply,500,&negative), i;
+    if (n==-2) {
+        fprintf(stderr,"ECU %02X DID %04X NRC %02X\n",ecu,did,negative);
+        return 0;
+    }
+    if (n<0) return n==-3 ? -3 : -1;
+    n-=3;
+    if (n>cap) n=cap;
+    memcpy(out,reply+3,(size_t)(n>0 ? n : 0));
+    if (trace_reads) {
+        fprintf(stderr,"RAW mono_ms=%llu ecu=%02X did=%04X payload=",(unsigned long long)bd_mono_ms(),ecu,did);
+        for (i=0;i<n;++i) fprintf(stderr,"%02X",out[i]);
+        fputc('\n',stderr);
+    }
+    return n>0 ? n : 0;
+}
+
+/* OBD service 01 on the DME, with read_did's return values. */
+static int read_pid(struct diag_link *link, unsigned pid, double *value) {
+    unsigned char request[]={0x01,(unsigned char)pid}, prefix[]={0x41,(unsigned char)pid}, reply[16];
+    unsigned negative;
+    int n=diag_link_request(link,0x12,request,2,prefix,2,reply,sizeof reply,500,&negative), decoded;
+    if (n==-2) { fprintf(stderr,"ECU 12 PID %02X NRC %02X\n",pid,negative); return 0; }
+    if (n==-3) return -3;
+    if (n<0) return -1;
+    decoded=m4_decode_pid(pid,reply+2,(size_t)n-2,value);
+    if (trace_reads) {
+        int i;
+        fprintf(stderr,"RAW mono_ms=%llu ecu=12 pid=%02X payload=",(unsigned long long)bd_mono_ms(),pid);
+        for (i=2;i<n;++i) fprintf(stderr,"%02X",reply[i]);
+        if (decoded) fprintf(stderr," decoded=%.6f\n",*value);
+        else fputs(" unavailable\n",stderr);
+    }
+    return decoded;
+}
+
+/* Extra signals, at most one read per tick. Tires live in the DSC, which the MOST tunnel cannot reach. */
+enum { EX_TARGET, EX_BATTERY, EX_REV, EX_TIRE0, EX_COUNT = EX_TIRE0 + 4 };
+static const struct { unsigned ecu, did, period, first; } kExtras[EX_COUNT] = {
+    {M4_DME, M4_DID_BOOST_TARGET, 200, 300}, {M4_DME, M4_DID_BATTERY, 5000, 1500},
+    {M4_DME, M4_DID_REV_LIMIT, 2000, 2500},
+    {M4_DSC, M4_DID_TIRE_FL, 10000, 3000}, {M4_DSC, M4_DID_TIRE_FL+1, 10000, 5500},
+    {M4_DSC, M4_DID_TIRE_FL+2, 10000, 8000}, {M4_DSC, M4_DID_TIRE_FL+3, 10000, 10500}
+};
+
+/* Bounded CSV logging, on while the flag file exists. A ring of four 2 MB files, never with less than
+ * 20 MB free on the volume. */
+enum { LOG_FILES = 4, LOG_FILE_BYTES = 2000000, LOG_ROW_MS = 100 };
+static const unsigned long long kLogMinFree = 20000000ull;
+static struct {
+    const char *dir, *flag;
+    FILE *fp;
+    long bytes;
+    int enabled;
+    uint64_t start, next_check, next_row, next_flush;
+} logger = {"/var/opt/hmi/data/ID5/Plugins/BoostDeck/logs",
+            "/var/opt/hmi/data/ID5/Plugins/BoostDeck/logging-enabled", 0, 0, 0, 0, 0, 0, 0};
+
+static void log_close(void) {
+    if (logger.fp) { fclose(logger.fp); logger.fp=0; }
+}
+
+static void log_open(uint64_t now) {
+    char path[512];
+    struct stat st;
+    struct statvfs vfs;
+    time_t oldest=0, wall=time(0);
+    int i, pick=0;
+    mkdir(logger.dir,0755);
+    if (statvfs(logger.dir,&vfs) ||
+        (unsigned long long)vfs.f_bavail*(unsigned long long)vfs.f_frsize < kLogMinFree) {
+        fprintf(stderr,"Logging paused: under 20 MB free in %s\n",logger.dir);
+        return;
+    }
+    for (i=0;i<LOG_FILES;++i) {   /* reuse a missing file, else the oldest */
+        snprintf(path,sizeof path,"%s/log-%d.csv",logger.dir,i);
+        if (stat(path,&st)) { pick=i; break; }
+        if (!i || st.st_mtime<oldest) { oldest=st.st_mtime; pick=i; }
+    }
+    snprintf(path,sizeof path,"%s/log-%d.csv",logger.dir,pick);
+    logger.fp=fopen(path,"w");
+    if (!logger.fp) { fprintf(stderr,"Logging: cannot open %s\n",path); return; }
+    logger.bytes=fprintf(logger.fp,"# BoostDeck M4 log, head unit clock %s",ctime(&wall));
+    logger.bytes+=fprintf(logger.fp,"t_s,boost_psi,afr,timing_deg,intake_c,oil_c,rail_bar,oil_bar,"
+                                    "coolant_c,boost_target_psi,battery_v,rev_limit_rpm\n");
+    if (!logger.start) logger.start=now;
+}
+
+static void log_tick(uint64_t now, const bd_frame *f, const m4_extra *x) {
+    static const unsigned extras[]={MX_BOOST_TARGET,MX_BATTERY,MX_REV_LIMIT};
+    char row[256];
+    int n, used;
+    unsigned i;
+    if (now>=logger.next_check) {
+        logger.enabled=access(logger.flag,F_OK)==0;
+        logger.next_check=now+2000;
+        if (!logger.enabled) log_close();
+        else if (!logger.fp) log_open(now);
+    }
+    if (!logger.fp || now<logger.next_row) return;
+    logger.next_row=now+LOG_ROW_MS;
+    used=snprintf(row,sizeof row,"%.2f",(now-logger.start)/1000.0);
+    for (i=0;i<8;++i) {
+        n=bd_is_fresh(f,i,now-f->sent_ms) ? snprintf(row+used,sizeof row-used,",%.2f",f->value[i])
+                                           : snprintf(row+used,sizeof row-used,",");
+        if (n>0 && n<(int)sizeof row-used) used+=n;
+    }
+    for (i=0;i<sizeof extras/sizeof extras[0];++i) {
+        n=m4_extra_fresh(x,extras[i],now-x->sent_ms) ? snprintf(row+used,sizeof row-used,",%.2f",x->value[extras[i]])
+                                                     : snprintf(row+used,sizeof row-used,",");
+        if (n>0 && n<(int)sizeof row-used) used+=n;
+    }
+    if (used<(int)sizeof row-1) { row[used++]='\n'; row[used]=0; }
+    if (fputs(row,logger.fp)<0) { log_close(); return; }
+    logger.bytes+=used;
+    if (now>=logger.next_flush) { fflush(logger.fp); logger.next_flush=now+1000; }
+    if (logger.bytes>=LOG_FILE_BYTES) { log_close(); log_open(now); }
+}
+#endif
 
 /* 1 decoded, 0 unavailable or refused, -1 link lost, -3 this read failed but the link is kept. */
 static int read_did(struct diag_link *link, unsigned ecu, unsigned did, double *value) {
@@ -422,7 +568,17 @@ int main(int argc, char **argv) {
 #endif
     /* Each slow signal has its own deadline. Stagger temperature reads
      * after the first scan so they do not delay the fast gauges together. */
+#ifdef M4_S55
+    /* S55: oil temperature (DME 4408) takes the transmission slot, and rail pressure comes from OBD
+     * PID 23 because the pre-2019 DME refuses 56D7. Provenance: docs/M4_S55.md. */
+    const unsigned dids[] = {0x4201,0x4205,0x5889,0x4a49,0x580f,M4_DID_OIL_TEMP,M4_RAIL_PID,0x586f,0x4300};
+    m4_extra mx;
+    uint64_t mx_observed[MX_COUNT] = {0}, ex_due[EX_COUNT] = {0}, ex_failed[EX_COUNT] = {0};
+    uint64_t mx_next_send = 0;
+    int ex_started = 0;
+#else
     const unsigned dids[] = {0x4201,0x4205,0x5889,0x4a49,0x580f,0xda12,0x56d7,0x586f,0x4300};
+#endif
     const unsigned periods[] = {1000,0,0,0,2000,2000,0,0,2000};
     const unsigned first_delay[] = {900,0,0,0,500,1150,0,0,1700};
     uint64_t due[sizeof dids/sizeof dids[0]] = {0};
@@ -440,6 +596,10 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--trace")) trace_reads = 1;
         else if (!strcmp(argv[i], "--no-trans")) no_trans = 1;
         else if (!strcmp(argv[i], "--host") && i+1 < (unsigned)argc) host = argv[++i];
+#ifdef M4_S55
+        else if (!strcmp(argv[i], "--log-dir") && i+1 < (unsigned)argc) logger.dir = argv[++i];
+        else if (!strcmp(argv[i], "--log-flag") && i+1 < (unsigned)argc) logger.flag = argv[++i];
+#endif
         else if (!strcmp(argv[i], "--port") && i+1 < (unsigned)argc) port = number(argv[++i],1,65535);
         else if (!strcmp(argv[i], "--udp-port") && i+1 < (unsigned)argc) udp_port = number(argv[++i],1,65535);
         else if (!strcmp(argv[i], "--cycles") && i+1 < (unsigned)argc) cycles = number(argv[++i],1,1000000);
@@ -463,7 +623,12 @@ int main(int argc, char **argv) {
     memset(&dest,0,sizeof dest); dest.sin_family=AF_INET; dest.sin_port=htons((uint16_t)udp_port);
     inet_pton(AF_INET,"127.0.0.1",&dest.sin_addr); /* local process IPC only */
     memset(&f,0,sizeof f); f.demo=(unsigned)demo;
+#ifdef M4_S55
+    memset(&mx, 0, sizeof mx);
+    fprintf(stderr, "%s: F82 M4 S55 profile (OBDb 2015 M4 captures); validate against a logger.\n",
+#else
     fprintf(stderr, "%s: 2016 340i candidate profile; validate against ISTA/logger.\n",
+#endif
         demo ? "DEMO / NO VEHICLE CONNECTION" : host ? "READ ONLY / HSFZ" : "READ ONLY / MOST");
     while (diag_running && (!cycles || count < cycles) && (!session || getppid() == parent)) {
         uint64_t start = bd_mono_ms();
@@ -500,6 +665,10 @@ int main(int argc, char **argv) {
                 }
                 kept = i != 0 ? f.valid & (1u << (i-1)) : 0;
                 f.valid &= ~kept;
+#ifdef M4_S55
+                if (dids[i] & M4_OBD_PID) rc = read_pid(&link, dids[i] & 0xffu, &v);
+                else
+#endif
                 rc = read_did(&link, dids[i] == 0xda12 ? 0x18 : 0x12, dids[i], &v);
                 if (rc == -3) { /* skip it for a while; a value still fresh stays shown */
                     failed_until[i] = bd_mono_ms()+2000;
@@ -532,6 +701,15 @@ int main(int argc, char **argv) {
                     v = (v-ambient) * .145037738; /* kPa absolute - measured ambient -> gauge psi */
                 }
                 if (i == 2) v *= 14.7; /* measured lambda -> gasoline-equivalent AFR */
+#ifdef M4_S55
+                /* The S55's 586F is absolute: this car read 1.03 bar with the engine off and 3.35 bar at
+                 * idle, with ambient at 1.006 bar. Show gauge pressure, never below zero. */
+                if (dids[i] == 0x586f) {
+                    if (!have_ambient || bd_mono_ms()-ambient_time > 1800) continue;
+                    v -= ambient / 100.0;
+                    if (v < 0) v = 0;
+                }
+#endif
                 f.value[i-1]=v; observed[i-1]=bd_mono_ms(); f.valid |= 1u << (i-1);
                 /* A tunnel read is slow, so each new value goes out at once. */
                 if (diag_link_on_most(&link) && !send_frame(sock,&dest,&f,observed)) { perror("send frame"); diag_running=0; }
@@ -565,6 +743,76 @@ int main(int argc, char **argv) {
             }
         }
         if (!send_frame(sock,&dest,&f,observed)) { perror("send frame"); diag_running=0; }
+#ifdef M4_S55
+        if (!demo && diag_running && diag_link_up(&link)) {
+            /* One extra read per tick: the most overdue entry that is due. */
+            uint64_t now = bd_mono_ms();
+            int pick = -1;
+            unsigned e;
+            if (!ex_started) {
+                for (e = 0; e < EX_COUNT; ++e) ex_due[e] = now + kExtras[e].first;
+                ex_started = 1;
+            }
+            for (e = 0; e < EX_COUNT; ++e) {
+                if (now < ex_due[e] || now < ex_failed[e]) continue;
+                if (kExtras[e].ecu != M4_DME && diag_link_on_most(&link)) continue;
+                if (pick < 0 || ex_due[e] < ex_due[pick]) pick = (int)e;
+            }
+            if (pick >= 0) {
+                unsigned char payload[64];
+                int n = read_payload(&link, kExtras[pick].ecu, kExtras[pick].did, payload, sizeof payload);
+                ex_due[pick] = now + kExtras[pick].period;
+                if (n == -1) {
+                    diag_link_drop(&link);
+                    if (diag_link_lost(&link)) { most_lost = 1; diag_running = 0; }
+                } else if (n == -3 || n == 0) {
+                    ex_failed[pick] = now + (n == 0 ? 30000 : 2000);   /* refused: stop asking for a while */
+                } else {
+                    double a, b, t;
+                    uint64_t seen = bd_mono_ms();
+                    if (pick == EX_TARGET) {
+                        if (bd_decode_did(M4_DID_BOOST_TARGET, payload, (size_t)n, &a) && have_ambient &&
+                            seen - ambient_time <= 1800) {
+                            mx.value[MX_BOOST_TARGET] = (a - ambient) * .145037738;
+                            mx.valid |= 1u << MX_BOOST_TARGET; mx_observed[MX_BOOST_TARGET] = seen;
+                        }
+                    } else if (pick == EX_BATTERY) {
+                        if (m4_decode_battery(payload, (size_t)n, &a)) {
+                            mx.value[MX_BATTERY] = a; mx.valid |= 1u << MX_BATTERY; mx_observed[MX_BATTERY] = seen;
+                        }
+                    } else if (pick == EX_REV) {
+                        if (m4_decode_rev_limit(payload, (size_t)n, &a)) {
+                            mx.value[MX_REV_LIMIT] = a; mx.valid |= 1u << MX_REV_LIMIT; mx_observed[MX_REV_LIMIT] = seen;
+                        }
+                    } else {
+                        unsigned tire = (unsigned)pick - EX_TIRE0;
+                        int got = m4_decode_tire(payload, (size_t)n, &a, &b, &t);
+                        if (got & 1) { mx.value[MX_TP_FL+tire] = a; mx.valid |= 1u << (MX_TP_FL+tire); mx_observed[MX_TP_FL+tire] = seen; }
+                        if (got & 4) { mx.value[MX_TS_FL+tire] = b; mx.valid |= 1u << (MX_TS_FL+tire); mx_observed[MX_TS_FL+tire] = seen; }
+                        if (got & 2) { mx.value[MX_TT_FL+tire] = t; mx.valid |= 1u << (MX_TT_FL+tire); mx_observed[MX_TT_FL+tire] = seen; }
+                    }
+                }
+            }
+        }
+        {
+            uint64_t now = bd_mono_ms();
+            unsigned e;
+            mx.sent_ms = now;
+            for (e = 0; e < MX_COUNT; ++e) {
+                uint64_t age = now - mx_observed[e];
+                mx.age_ms[e] = age > 999999 ? 999999 : (unsigned)age;
+            }
+            if (now >= mx_next_send && diag_running) {
+                char packet[BD_MAX_PACKET];
+                int len;
+                ++mx.seq;
+                len = m4_extra_encode(&mx, packet, sizeof packet);
+                if (len > 0) sendto(sock, packet, (size_t)len, 0, (struct sockaddr *)&dest, sizeof dest);
+                mx_next_send = now + 500;
+            }
+            if (!demo) log_tick(now, &f, &mx);
+        }
+#endif
         ++count;
         {
             uint64_t elapsed = bd_mono_ms()-start;
@@ -574,6 +822,9 @@ int main(int argc, char **argv) {
             if (idle_ms) pause_ms((int)idle_ms);
         }
     }
+#ifdef M4_S55
+    log_close();
+#endif
     diag_link_close(&link);
     close(sock);
     return most_lost ? 1 : 0;

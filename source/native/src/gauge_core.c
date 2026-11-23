@@ -19,9 +19,20 @@ uint64_t bd_mono_ms(void) {
 int bd_decode_did(unsigned did, const unsigned char *p, size_t n, double *out) {
     unsigned r;
     double x, lo, hi;
-    if (!p || !out || n != (did == 0x580f ? 1u : 2u)) return 0;
-    r = did == 0x580f ? p[0] : ((unsigned)p[0] << 8) | p[1];
+    /* Pre-2019 S55/N55 DMEs answer 4300 with one byte (OBDb BMW-M4 2015 captures). */
+    const int one_byte = did == 0x580f || (did == 0x4300 && n == 1);
+    if (!p || !out || n != (one_byte ? 1u : 2u)) return 0;
+    r = one_byte ? p[0] : ((unsigned)p[0] << 8) | p[1];
+    if (did == 0x4300 && one_byte) {
+        if (r == 255) return 0;
+        x = r * .75 - 48; lo = -48; hi = 143.25;
+        if (x < lo || x > hi) return 0;
+        *out = x;
+        return 1;
+    }
     switch (did) {
+    case 0x4408: if (r == 65535) return 0; x = r / 10.0; lo = -40; hi = 200; break; /* S55 oil C */
+    case 0x4ab0: x = r / 256.0; lo = 20; hi = 255; break; /* boost set point, absolute kPa */
     case 0x4201: x = r / 256.0; lo = 40; hi = 115; break; /* ambient kPa */
     case 0x4205: x = r / 128.0; lo = 20; hi = 450; break; /* absolute kPa */
     case 0x5889: x = r * 16.0 / 65535.0; lo = .5; hi = 2; break; /* lambda */
