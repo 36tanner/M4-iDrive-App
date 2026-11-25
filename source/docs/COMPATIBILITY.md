@@ -1,10 +1,10 @@
 # Dashboard compatibility
 
-Match the reported firmware and both SHA-256 hashes before using the dashboard package. The desktop installers also check the display and generate layouts for 800 × 480, 960 × 480, 1280 × 480, 1440 × 540, and 1920 × 720. The raw dashboard ZIP uses the 1280 × 480 layout.
+Verify both live SHA-256 hashes against the same approved framework pair before using the dashboard package. The firmware label can differ when the pair matches. The desktop installers also check the display and select bundled layouts for 800 × 480, 960 × 480, 1280 × 480, 1440 × 540, and 1920 × 720. The raw dashboard ZIP uses the 1280 × 480 layout.
 
-## Tested and working installer profiles
+## Desktop installer profiles
 
-The installer accepts these exact firmware and framework combinations. The evidence column describes what worked on each firmware and where the result came from.
+The installer uses the approved framework pairs in [installer-profiles.json](installer-profiles.json) for installation eligibility. Reported results apply to the named menus and vehicles.
 
 | NBTevo firmware | AppFramework SHA-256 | CoreFramework SHA-256 | Evidence |
 | --- | --- | --- | --- |
@@ -12,24 +12,45 @@ The installer accepts these exact firmware and framework combinations. The evide
 | N18092I | Same as N18032I | Same as N18032I | **Tested and working** on wired ENET with an earlier package, per [owner report](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/31). The reported framework pair matches N18032I. |
 | P18362I | `d9c674c210272e8f07473e73e59ed8f23d984d4d30162971bedb56d21c682b28` | `896d9de22fa85f7f5aa4fc2a0e62003c63c41c47186b06f39a2fd4fee06fa5d5` | **Tested and working** for gauges over wired ENET on an earlier package, per the [owner report](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/8). The current plugin build also loaded in the QNX emulator. |
 | V20153I | `085b7f2a9f96734be51621a70a04c24d01525eb5e9852f45c845a7d2f4ae4c67` | `56705e56c349d9ae57a7782bd39b795cfc01391ba8ff155046f32fbe8ffad2cb` | Exact match to the capture used for the earlier QNX load check |
-| Y24073J | `ef2488b007d592301d8f21d9aa60771ad552d06b5e97c29e7813e3946644d820` | `cb0e488d1ebe2e30de87bb56f0e93d6a2d76b44309b0b47fef5b0b7cec048973` | Exact match to the capture used for the earlier QNX load check |
+| Y24073J | `ef2488b007d592301d8f21d9aa60771ad552d06b5e97c29e7813e3946644d820` | `cb0e488d1ebe2e30de87bb56f0e93d6a2d76b44309b0b47fef5b0b7cec048973` | Earlier QNX load check passed. [#56](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/56) and [#77](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/77) report clipped or empty display content. |
 
-These checks concern the head unit. Available gauges and controls depend on the vehicle ECU and tune. The two distinct gateway paths reported for [T23235J](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/37) and the reference car are handled through `gateway-ip.txt`. The installer still requires a matched firmware profile. For T23235J, use the [read-only capture tool](../tools/capture_headunit.py) to collect the framework evidence for a port. S19322I has a statically checked pair [below](#static-framework-checks). Compare both hashes against the target car before planning a parked load check. See [issue #27](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/27) for the reported R19144I HMI freeze.
+### Added in installer v0.7.3
 
-## Other reported firmware
-
-| NBTevo firmware | Reported result |
+| NBTevo firmware | Evidence |
 | --- | --- |
-| K17052I | [Support request #34](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/34) |
-| R19144I | [Reported HMI freeze #27](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/27) |
-| S19322I | [Capture report #38](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/38) and static checks below |
-| T23235J | [BoostDeck and Engine Fault Codes opened](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/37) on the reported Supra. Its earlier package could not reach the diagnostic gateway. |
-| U19384I | [Capture report #4](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/4) and static checks below |
-| V20153J | [Reported controller compatibility #25](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/25) |
-| X20511I | [Capture report #16](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/16) and static checks below |
-| Y21432J | [Capture report #1](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/1) and static checks below |
-| Y22292I | [Contributor reported a working custom Bootmod3 build #42](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/42) |
-| Y23236I | [Capture report #40](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/40) |
+| K17052I | Both reported framework hashes and sizes match the M17345I pair. The owner reports four apps running on a split-node F82 with a 1280 × 480 screen. [Issue 117](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/117) |
+| L17252I | Attached capture matches the audited M17345I pair byte for byte. |
+| M17365I | Both hashes in [#60](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/60) match the audited M17345I pair. The owner confirmed installation with v0.7.3 and reported missing telemetry for several gauges. |
+| Q18491I | The attached libraries match R19101I. The rebuilt BoostDeck and ShiftDeck pass the reference ABI comparison. **Tested and working** for BoostDeck in [#76](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/76), which also reports gateway errors in Bootmod3 Suite and BEAMer. |
+| R19144I | The attached report matches the same R19101I pair. **Tested and working** for MHD+ Suite and Engine Fault Codes in [#27](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/27); the same report describes reproducible HMI freezes with BoostDeck and ShiftDeck. The installer accepts this profile. A separate F87 report with the same hashes passed a 10–15 minute parked check with its ID6 interface. [#89](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/89) |
+| S19322I | [#38](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/38) matches the audited S19221I pair. |
+| T18501I | [#53](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/53) matches the audited R19101I pair. |
+| U19384I | [#4](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/4) matches the audited U19384I pair. |
+| X20511I | [#73](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/73) matches the audited X20511I pair. |
+| Y21432J | **Tested and working** for BoostDeck in [#62](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/62). ShiftDeck and Engine Fault Codes also opened. xDrive mode switching still depends on the DSC version. |
+| Y22292I | **Tested and working** for BoostDeck and ShiftDeck in [#59](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/59#issuecomment-6967237281). The owner supplied a passing ABI audit. Engine Fault Codes opened, but the displayed code meanings were not confirmed. |
+| Y23236I | **Tested and working** for MHD+ Suite, ShiftDeck, and Engine Fault Codes in [#69](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/69). BoostDeck worked after an initial crash; transmission temperature was missing with the engine running. [#40](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/40) provides the matching hashes. |
+
+### Added in installer v0.7.4
+
+| NBTevo firmware | Evidence |
+| --- | --- |
+| M17345I | Both framework hashes match M17365I and L17252I. |
+| R19101I | Both framework hashes match R19144I, Q18491I and T18501I. |
+| S19221I | Both framework hashes match S19322I. |
+| T23235J | Both framework hashes from the 1280 × 480 Supra in [#37](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/37) exactly match the existing Y23236I profile. [The owner confirmed](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/37#issuecomment-6990226041) that BoostDeck and Engine Fault Codes work after a parked restart with the car's diagnostic gateway configured. Transmission temperature stays blank because its EGS rejects the existing DID [#79](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/79). |
+
+### Firmware reports still needing evidence
+
+| Firmware | Evidence needed |
+| --- | --- |
+| J16383I | The 1280 × 480 request in [#86](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/86) supplies a version and display. A submitted Trio capture contains both hashes. The pair is distinct from the existing installer profiles and is recorded as capture-only. |
+| V20153J | [#25](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/25) reports that the ABI resolves. Both exact framework hashes and display size are still needed. V20153I is a different profile. |
+| W202xxI | [#97](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/97) reports a working installation and a BEAMer module issue. The exact W20204I submission is approved. Other W202xxI reports need their exact firmware code, both framework hashes, and display size. |
+
+O18184I has a distinct framework pair. The supplied Trio capture matches it, and the owner reported a successful installation with native Android Auto removed. [Issue #115](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/115) Use the [Trio Compatibility Collector](../tools/trio-collector/Quick%20Start.md) for the version, both framework hashes, and the active display size.
+
+The 320d handoff matches the existing N18032I firmware profile. ShiftDeck RPM and BoostDeck transmission temperature were observed working. Dynamic diesel pressure and intake requests remain unshipped because the draft redefines a shared ECU diagnostic slot and independent validation is incomplete. Firmware compatibility does not determine which engine signals or tuning controls a vehicle supports.
 
 ## Static framework checks
 
@@ -50,7 +71,7 @@ The pairs below were extracted from the head-unit software in BMW programming da
 
 Results:
 
-- **ABI audit:** `native/tools/audit_framework_abi.py`, with the ID5_1911 pair as reference, passes for all seven packaged plugins (BoostDeck, ShiftDeck, EngineCodes, MhdMaps, Bootmod3Suite, XDriveControl, HudTest) on every build above. It covers 46 to 52 function prefixes per plugin and the `bmw::PluginApp` vtable slots.
+- **ABI audit:** `tools/audit_framework_abi.py`, with the ID5_1911 pair as reference, passes for all seven packaged plugins (BoostDeck, ShiftDeck, EngineCodes, MhdMaps, Bootmod3Suite, XDriveControl, HudTest) on every build above. It covers 46 to 52 function prefixes per plugin and the `bmw::PluginApp` vtable slots.
 - **Exports and imports:** all ten builds export the same framework symbols with the same names, sizes, and types, and all 52 `bmw::` symbols imported by the plugins resolve in each.
 - **Car capture:** the P18362I pair equals the pair read from a 2017 F20 (B58). The Y21432J and Y24073J pairs equal hashes reported from cars in issues #1, #11, and #13.
 - **System libraries:** `libm.so.2`, `libsocket.so.3`, and `libstdc++.so.6` are byte-identical in M17345I, O18184I, P18362I, S19221I, X20511I, Y21432J, and Y24073J. They were not extracted for R19101I, S19322I, and U19384I. For P18362I, every symbol and symbol version imported by the seven plugins and seven workers resolves against these and the firmware's `libc.so.3`. The `libc.so.3` of the other builds was not checked.
@@ -58,9 +79,52 @@ Results:
 Open points:
 
 - The original ten-build audit used ID5_1911 as its reference. The downloadable fingerprint now uses the N18032I reference capture.
-- R19101I has the framework sizes reported for R19144I (51580 and 95400 bytes). R19144I itself was not inspected, and its [HMI freeze report](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/27) is unexplained by these checks.
+- The R19144I report matches both R19101I framework hashes. Its [HMI freeze report](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/27) is unexplained by these checks.
 - The audit compares instruction prefixes and vtable slots. It does not show that a plugin loads or that its menus work.
 
 ## xDrive Control (experimental)
 
-The Status command reports whether DSC identification timed out, returned a UDS refusal, or identified an unsupported SGBD index. This distinguishes the missing replies in [issue #23](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/23) from an identified 0F2100 in [issue #25](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/25). Mode changes retain the stationary, engine-off Park checks. The write allowlist remains 0F2510 and 0F2850. The immediate AWD restore is limited to 0F2850, as in the [upstream measurements and implementation](https://github.com/cauliflowermossgrape/idrive7-apps/blob/main/apps/live_adjustments/xdrive.js).
+The Status command reports whether DSC identification timed out, returned a UDS refusal, or identified an unsupported SGBD index. This distinguishes the missing replies in [issue #23](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/23) from an identified 0F2100 in [issue #25](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/25). Mode changes retain the stationary Park checks, with the engine off except on 0F1860. The write allowlist is 0F2510, 0F2850, and 0F1860 (F-series DSC_25). For 0F1860, `dsc_25.prg` defines 0xDBE1 as LMV_FUNKTION (1 active, 0 inactive for the current terminal 15 cycle). The worker first verifies the tested LMV 0F1480 transfer case. This LMV rejects 0xDB32 with NRC 31. The readback is the LMV target qualifier in 0x4002 byte 3 (`lmv_01.prg` STATUS_SOLLMOMENT): 0x20 applies the DSC target, 0x28 opens the clutch, 0x70 is rear-wheel drive. With the engine off, DSC_25 reports 0xDBE1 = 0 and the LMV reports 0x60 (fallback), so on 0F1860 the switch requires the engine running, stationary, and Park. The restore button also writes 0xDBE1 = 1 on 0F1860, as `dsc_25.prg` allows; the owner of the test car confirmed that it restores AWD, and an ignition cycle also restores AWD. On a 2018 F-series car, the write took more than 2 s to acknowledge; 0x4002 changed from 0x20 to 0x28, and front-axle actual torque (0x4003) stayed at its zero value up to 52 km/h. The immediate AWD restore is limited to 0F2850, as in the [upstream measurements and implementation](https://github.com/cauliflowermossgrape/idrive7-apps/blob/main/apps/live_adjustments/xdrive.js), and 0F1860.
+
+
+FreZZZeR cross-checked the factory `dsc_25.prg` and `lmv_01.prg` definitions. The
+LMV 0x4002 qualifier also reports 0x61 for fallback with RTA calibration, 0x62 for
+fallback with clutch opening, 0x80 for initialization, 0xE0 for standby, and 0xFF for
+an invalid target. A DSC `48097D` describes an open transfer-case clutch and
+rear-wheel drive only. It is consistent with commanded RWD. zelnkup's follow-up
+drive logged zero front torque and qualifier 0x28 throughout, with no DSC fault
+recorded. A `48097D` entry is therefore optional evidence of the commanded state.
+[Factory-data cross-check](https://github.com/inotbarnacle/ID6_apps_prerelease/pull/87#issuecomment-7036793563) · [Drive log follow-up](https://github.com/inotbarnacle/ID6_apps_prerelease/pull/87#issuecomment-7036949770)
+
+For the N57 F3x reports, LMV `440113` or `440114` would point to a transfer-case
+variant mismatch. That explanation is still a hypothesis for the affected cars.
+DSC `480682`, `48068C`, and `480AB5` concern unknown clutch position, temporary
+clutch disablement, or protection. LMV `440117` and `440118` concern temporary
+transfer-case deactivation. The write allowlist retains its existing scope. For DSC_25/LMV
+0F1480 pair, the EGS Park reply is 00 01 with the engine running. The engine-off
+branches still require 00 06. RPM and zero-speed checks also have to pass.
+[Park reply measurements and fix](https://github.com/inotbarnacle/ID6_apps_prerelease/pull/114) · [N57 compatibility discussion](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/68)
+
+## New compatibility submissions
+
+| Firmware | Evidence | Installer status |
+| --- | --- | --- |
+| T24081I | Both framework hashes match Y24073J. The submitted capture reports 1280 × 480 and split-node SSH. The current BoostDeck and ShiftDeck passed the static framework comparison. | Exact-hash alias |
+| Y24073J | Both submissions match the existing framework pair. One capture reports 1440 × 540. [Issue #105](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/105) | Existing profile |
+| Y22292I | The submitted framework bytes match both report digests and the existing profile. [Issue #59](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/59) | Existing profile |
+| J16383I | One submitted capture reports a distinct pair. [Issue #86](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/86) | Capture-only |
+| O18184I | The submitted 1280 × 480 split-node capture matches the distinct pair. The owner reported a working installation. [Issue #115](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/115) | Installer profile |
+| T21424I | Both reported fingerprints match Y21432J. [Issue #129](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/129) | Installer profile |
+| W20204I | Both frameworks match V20153I. trulex submitted the installer profile. mohamaddude1 reported BoostDeck, ShiftDeck and Engine Fault Codes working on an F90. [PR #112](https://github.com/inotbarnacle/ID6_apps_prerelease/pull/112) · [Issue #104](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/104) | Exact-hash alias |
+
+On split-node units, the installer reads the firmware version from Jacinto first, as Trio Collector does. It checks the actual HMI framework files on OMAP and requires both hashes to match. The supplied Y22292I capture matches the existing profile at 1280 × 480.
+
+The installer recognises capture-only pairs and reports that they require a native ABI check and parked runtime validation before staging.
+
+## Reported Bootmod3 and HUD compatibility limits
+
+- Bootmod3 Suite reads the active slot automatically when the map page opens and after each selection, after identifying a supported CustomROM. The ID6 candidate imports newer marker layouts and profile metadata from [iDrive7 Engine Config](https://github.com/cauliflowermossgrape/idrive7-apps/blob/35bca28bc82b30482d73782877ebaf92c69dcb8c/apps/live_adjustments/bm3_protocol.js). For an unsupported dynamic DID, it tries the same fixed marker via a direct diagnostic read. This covers the refusal reported in [issue #95](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/95) in simulation. Whether the S55 accepts the direct read and matches a supported ROM still needs a parked test.
+- An unsupported DSC can report the DSC, LMV, and VIP module indexes via **Refresh status**. Upstream has a distinct [G-series VIP control path](https://github.com/cauliflowermossgrape/idrive7-apps/blob/35bca28bc82b30482d73782877ebaf92c69dcb8c/apps/live_adjustments/README.md#xdrive-experimental). The ID6 candidate keeps its existing DSC and LMV write allowlist.
+- HUD Gauges accepts a verified gateway IPv4 address and distinguishes missing vehicle data from an overlay rejection. The F06 and F16 in [issue #82](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/82) and [issue #36](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/36) reject the reference HUD text handle. The worker checks the reference text handle before changing visibility or drawing. Their layouts still need a parked capture of the factory HUD handle setup. st1ng's [CarPlay Advanced protocol notes](https://github.com/st1ng/nbtevo-carplay-advanced/blob/main/AGENTS.md) describe observing the factory handle setup, and document why the fixed 6WA handles cannot be assumed across clusters.
+- HUD Gauges starts only when enabled for the current HMI session. The worker checks for native NBT-AAD and the CarPlay Advanced HUD hook before registering on MOST. BoostDeck, ShiftDeck, LaunchDeck and WarmDeck retain HSFZ diagnostics when native NBT-AAD is present. Their MOST fallback is disabled in that configuration. HUD Gauges yields its MOST client when a dashboard needs the MOST diagnostics tunnel. The affected combinations still need an on-car check. [Issue #22](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/22) · [Issue #105](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/105)
+- HUD uses the active dashboard worker's RPM stream. BoostDeck can also share a current boost reading from its selected channels over HSFZ. ShiftDeck shares RPM only. The HUD overlay also pauses while LaunchDeck or WarmDeck uses the link. [Issue #27](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/27) · [Issue #88](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/88) · [Issue #107](https://github.com/inotbarnacle/ID6_apps_prerelease/issues/107)

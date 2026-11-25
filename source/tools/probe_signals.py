@@ -18,8 +18,11 @@ def enet_address(value):
 
 
 def read_request(value):
-    if not re.fullmatch(r"01[0-9a-fA-F]{2}|22[0-9a-fA-F]{4}", value):
-        raise argparse.ArgumentTypeError("use a read-only OBD PID (0105) or UDS DID (224300)")
+    # 21 is KWP2000 ReadDataByLocalIdentifier, which older EGS software (such as the GS7D36SG DCT) may
+    # answer. All three services only read.
+    if not re.fullmatch(r"01[0-9a-fA-F]{2}|22[0-9a-fA-F]{4}|21[0-9a-fA-F]{2}", value):
+        raise argparse.ArgumentTypeError(
+            "use a read-only OBD PID (0105), UDS DID (224300) or KWP local identifier (210A)")
     return bytes.fromhex(value)
 
 
@@ -62,7 +65,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--local", required=True, type=enet_address, help="computer's wired ENET IPv4")
     parser.add_argument("--gateway", required=True, type=enet_address, help="diagnostic gateway IPv4")
-    parser.add_argument("--ecu", choices=("12", "18"), default="12", help="12 for DME or 18 for EGS")
+    parser.add_argument("--ecu", choices=("12", "18", "19", "29"), default="12", help="12 DME, 18 EGS, 19 transfer case, 29 DSC")
     parser.add_argument("requests", nargs="+", type=read_request)
     args = parser.parse_args()
     if args.local == args.gateway or len(args.requests) > 12:

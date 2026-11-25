@@ -30,13 +30,22 @@ class ProbeTest(unittest.TestCase):
             self.assertEqual(result, {"reply": "62 43 00 0b f8", "data": "0b f8"})
 
     def test_refuses_actuation_and_decodes_negative_reply(self):
-        for text in ("2f0100", "2e430001", "14ffffff", "2243", "01050c"):
+        for text in ("2f0100", "2e430001", "14ffffff", "2243", "01050c", "21", "210a00", "3101ff00"):
             with self.assertRaises(argparse.ArgumentTypeError):
                 read_request(text)
         client, gateway = socket.socketpair()
         with client, gateway:
             gateway.sendall(frame(1, bytes.fromhex("12f47f2231")))
             self.assertEqual(exchange(client, 0x12, read_request("22586f"))["nrc"], "31")
+
+
+class LocalIdentifierTest(unittest.TestCase):
+    def test_kwp_local_identifier_read(self):
+        self.assertEqual(read_request("210A"), bytes.fromhex("210a"))
+        client, gateway = socket.socketpair()
+        with client, gateway:
+            gateway.sendall(frame(1, bytes.fromhex("18f4610a7b")))
+            self.assertEqual(exchange(client, 0x18, read_request("210a")), {"reply": "61 0a 7b", "data": "7b"})
 
 
 if __name__ == "__main__":
