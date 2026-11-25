@@ -18,8 +18,11 @@ def enet_address(value):
 
 
 def read_request(value):
-    if not re.fullmatch(r"01[0-9a-fA-F]{2}|22[0-9a-fA-F]{4}", value):
-        raise argparse.ArgumentTypeError("use a read-only OBD PID (0105) or UDS DID (224300)")
+    # 21 is KWP2000 ReadDataByLocalIdentifier, which older EGS software (such as the GS7D36SG DCT) may
+    # answer. All three services only read.
+    if not re.fullmatch(r"01[0-9a-fA-F]{2}|22[0-9a-fA-F]{4}|21[0-9a-fA-F]{2}", value):
+        raise argparse.ArgumentTypeError(
+            "use a read-only OBD PID (0105), UDS DID (224300) or KWP local identifier (210A)")
     return bytes.fromhex(value)
 
 
